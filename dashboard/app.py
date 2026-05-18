@@ -9,10 +9,16 @@ Design     : sidebar anthracite, accent teal #20B2AA, cards avec ombres
 
 from __future__ import annotations
 
+import sys
 import base64
 import time
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+
+# ── Compatibilité cloud : ajoute la racine du repo au PYTHONPATH ───────────────
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import numpy as np
 import pandas as pd
@@ -99,15 +105,8 @@ def inject_styles() -> None:
         }
 
         .stApp {
-            background: transparent !important;
+            background: var(--bg) !important;
             color: var(--ink) !important;
-        }
-
-        /* ── Toolbar Streamlit transparent (laisse voir le canvas) ──────── */
-        [data-testid="stToolbar"],
-        [data-testid="stDecoration"],
-        header[data-testid="stHeader"] {
-            background: transparent !important;
         }
 
         /* ── Expander header layout ──────────────────────────────────────── */
@@ -1616,7 +1615,6 @@ def render_cta() -> None:
 
 def main() -> None:
     inject_styles()
-    inject_molecule_background()
 
     if not _MODULES_OK:
         st.error(f"Erreur de chargement des modules internes : {_MODULES_ERR}")
