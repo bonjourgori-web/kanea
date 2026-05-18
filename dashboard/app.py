@@ -24,6 +24,20 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.io as pio
+
+# ── Thème Plotly global : texte sombre lisible sur fond clair ─────────────────
+pio.templates["kanea"] = go.layout.Template(
+    layout=go.Layout(
+        font=dict(color="#1A2B3C", family="Inter, sans-serif"),
+        title_font=dict(color="#1A2B3C"),
+        xaxis=dict(tickfont=dict(color="#1A2B3C"), title_font=dict(color="#1A2B3C"), linecolor="#DDE8EE"),
+        yaxis=dict(tickfont=dict(color="#1A2B3C"), title_font=dict(color="#1A2B3C"), linecolor="#DDE8EE"),
+        legend=dict(font=dict(color="#1A2B3C")),
+        coloraxis=dict(colorbar=dict(tickfont=dict(color="#1A2B3C"), title_font=dict(color="#1A2B3C"))),
+    )
+)
+pio.templates.default = "plotly_white+kanea"
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -933,8 +947,9 @@ def _chart_animated_maladies(health_df: pd.DataFrame) -> go.Figure:
         title_font_size=15,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(showgrid=False),
-        yaxis=dict(gridcolor="#EEF2F6"),
+        font=dict(color="#1A2B3C", family="Inter, sans-serif"),
+        xaxis=dict(showgrid=False, tickfont=dict(color="#1A2B3C"), title_font=dict(color="#1A2B3C")),
+        yaxis=dict(gridcolor="#EEF2F6", tickfont=dict(color="#1A2B3C"), title_font=dict(color="#1A2B3C")),
     )
     fig.layout.updatemenus[0].buttons[0].args[1]["frame"]["duration"] = 400
     fig.layout.updatemenus[0].buttons[0].args[1]["transition"]["duration"] = 200
@@ -974,7 +989,10 @@ def _chart_scatter_climat_paludisme(
         height=420,
         title_font_size=15,
         paper_bgcolor="rgba(0,0,0,0)",
-        coloraxis_colorbar=dict(title="Humidité %", len=0.6),
+        font=dict(color="#1A2B3C", family="Inter, sans-serif"),
+        xaxis=dict(tickfont=dict(color="#1A2B3C"), title_font=dict(color="#1A2B3C")),
+        yaxis=dict(tickfont=dict(color="#1A2B3C"), title_font=dict(color="#1A2B3C")),
+        coloraxis_colorbar=dict(title="Humidité %", len=0.6, tickfont=dict(color="#1A2B3C")),
     )
     return fig
 
