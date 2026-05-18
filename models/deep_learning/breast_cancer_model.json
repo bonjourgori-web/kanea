@@ -1,0 +1,86 @@
+{
+  "architecture": "EfficientNet-B0",
+  "classes": [
+    "Benign",
+    "Malignant",
+    "Normal"
+  ],
+  "n_classes": 3,
+  "best_val_recall": 1.0,
+  "best_epoch": 1,
+  "epochs_run": 6,
+  "epochs_max": 20,
+  "early_stopped": true,
+  "dropout": 0.4,
+  "label_smoothing": 0.05,
+  "batch_size": 16,
+  "lr": 0.0005,
+  "patience": 5,
+  "trained_at": "2026-05-18T10:25:01",
+  "reproducibility_seed": 42,
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.3444,
+      "train_acc": 94.82,
+      "train_recall": 0.9482,
+      "val_loss": 0.193,
+      "val_acc": 100.0,
+      "val_recall": 1.0,
+      "lr": 0.000497
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.2176,
+      "train_acc": 98.41,
+      "train_recall": 0.9841,
+      "val_loss": 0.1722,
+      "val_acc": 100.0,
+      "val_recall": 1.0,
+      "lr": 0.000488
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.2143,
+      "train_acc": 98.41,
+      "train_recall": 0.9841,
+      "val_loss": 0.1757,
+      "val_acc": 100.0,
+      "val_recall": 1.0,
+      "lr": 0.000473
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.18,
+      "train_acc": 99.58,
+      "train_recall": 0.9958,
+      "val_loss": 0.177,
+      "val_acc": 100.0,
+      "val_recall": 1.0,
+      "lr": 0.000453
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.2129,
+      "train_acc": 99.58,
+      "train_recall": 0.9958,
+      "val_loss": 0.1711,
+      "val_acc": 100.0,
+      "val_recall": 1.0,
+      "lr": 0.000428
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.2039,
+      "train_acc": 99.68,
+      "train_recall": 0.9968,
+      "val_loss": 0.1712,
+      "val_acc": 100.0,
+      "val_recall": 1.0,
+      "lr": 0.000398
+    }
+  ],
+  "task": "breast_cancer_3class_classification",
+  "dataset": "MIAS/CBIS-DDSM/Synthétique",
+  "medical_note": "Priorité recall Malignant — FN (cancer non détecté) critique"
+}

@@ -1,0 +1,127 @@
+PROMPT COMPLET POUR CODEX
+
+Tu es un expert senior en intelligence artificielle, deep learning medical, et developpement d'applications sante en Afrique.
+
+Ta mission est de creer un projet complet appele :
+KANEA - Breast Cancer AI Detection (Offline AI for Africa)
+
+OBJECTIF :
+Creer une application d'intelligence artificielle capable de detecter le cancer du sein a partir d'images de mammographie, fonctionnant en mode local (offline) pour les zones rurales sans Internet.
+
+1. CONTEXTE PROJET
+
+Le cancer du sein est une cause majeure de mortalite chez les femmes africaines. La plupart des cas sont detectes a un stade tardif a cause :
+- manque de radiologues
+- acces difficile aux centres medicaux
+- cout eleve
+
+Le systeme doit :
+- detecter precocement les anomalies
+- fonctionner sans internet
+- aider les agents de sante
+
+2. SPECIFICATIONS TECHNIQUES
+
+Tu dois creer :
+
+IA (Module principal)
+- modele CNN pour classification :
+  - Normal
+  - Benign
+  - Malignant
+- utiliser :
+  - Transfer Learning (ResNet50 ou EfficientNet)
+  - TensorFlow / Keras ou PyTorch
+- dataset a utiliser :
+  - CBIS-DDSM (mammography)
+  - MIAS
+
+Pipeline IA complet :
+1. telechargement dataset
+2. conversion DICOM -> PNG
+3. preprocessing images (resize, normalize)
+4. data augmentation
+5. entrainement modele
+6. evaluation (accuracy, F1-score)
+7. sauvegarde modele (.h5 ou .onnx)
+
+3. STRUCTURE DU PROJET
+
+Creer une architecture propre :
+
+kanea/
+|-- data/
+|-- models/
+|-- notebooks/
+|-- src/
+|   |-- preprocessing.py
+|   |-- train.py
+|   |-- predict.py
+|   `-- utils.py
+|-- app/
+|   `-- app.py
+|-- requirements.txt
+`-- README.md
+
+4. APPLICATION (INTERFACE)
+
+Creer une application simple avec Streamlit.
+
+Fonctionnalites :
+- upload image mammographie
+- affichage image
+- prediction IA
+- affichage :
+  - classe
+  - niveau de risque (%)
+  - message interpretable
+
+5. FONCTIONNALITE OFFLINE
+
+IMPORTANT :
+- le modele doit etre utilisable sans internet
+- charger le modele localement
+- optimiser pour CPU
+
+Option :
+- export ONNX
+
+6. BONUS AVANCES
+
+Ajouter si possible :
+- Grad-CAM (visualisation des zones suspectes)
+- sauvegarde des resultats
+- logs simples
+
+7. LIVRABLE ATTENDU
+
+Generer :
+1. Code complet pret a executer
+2. Script d'entrainement automatique
+3. Application Streamlit
+4. README detaille (installation + utilisation)
+5. requirements.txt
+
+8. CONTRAINTES
+
+- Code propre, commente
+- structure comme un projet professionnel
+- optimise pour machines faibles
+- pas besoin de GPU obligatoire
+
+9. STYLE DE REPONSE
+
+- ecrire du code complet
+- expliquer brievement chaque partie
+- eviter les exemples partiels
+- privilegier un projet executable immediatement
+
+Commence maintenant par :
+1. creer la structure du projet
+2. ecrire preprocessing.py
+3. ecrire train.py complet
+4. ecrire app Streamlit
+
+BONUS OPTIONNEL
+
+Ajoute une fonction pour entrainer automatiquement des le lancement du projet si aucun modele n'existe.

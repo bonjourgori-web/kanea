@@ -1,0 +1,210 @@
+{
+  "malaria": {
+    "module": "malaria",
+    "error": "Modèle non entraîné"
+  },
+  "nutrition": {
+    "module": "nutrition",
+    "n_test": 400,
+    "classes": [
+      "MAM",
+      "MAS",
+      "Normal",
+      "Overweight"
+    ],
+    "features": [
+      "age_months",
+      "weight_kg",
+      "height_cm",
+      "muac_cm",
+      "whz",
+      "haz",
+      "waz",
+      "bmi",
+      "sex_encoded"
+    ],
+    "metrics": {
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "roc_auc": 1.0,
+      "false_negative_analysis": [
+        {
+          "class": "MAM",
+          "true_positives": 60,
+          "false_negatives": 0,
+          "false_negative_rate": 0.0,
+          "sensitivity": 1.0,
+          "medical_risk": "ACCEPTABLE"
+        },
+        {
+          "class": "MAS",
+          "true_positives": 20,
+          "false_negatives": 0,
+          "false_negative_rate": 0.0,
+          "sensitivity": 1.0,
+          "medical_risk": "ACCEPTABLE"
+        },
+        {
+          "class": "Normal",
+          "true_positives": 280,
+          "false_negatives": 0,
+          "false_negative_rate": 0.0,
+          "sensitivity": 1.0,
+          "medical_risk": "ACCEPTABLE"
+        },
+        {
+          "class": "Overweight",
+          "true_positives": 40,
+          "false_negatives": 0,
+          "false_negative_rate": 0.0,
+          "sensitivity": 1.0,
+          "medical_risk": "ACCEPTABLE"
+        }
+      ],
+      "critical_classes": [],
+      "classification_report": {
+        "MAM": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 60.0
+        },
+        "MAS": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 20.0
+        },
+        "Normal": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 280.0
+        },
+        "Overweight": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 40.0
+        },
+        "accuracy": 1.0,
+        "macro avg": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 400.0
+        },
+        "weighted avg": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 400.0
+        }
+      },
+      "cross_validation": {
+        "k": 5,
+        "accuracy_mean": 1.0,
+        "accuracy_std": 0.0,
+        "recall_mean": 1.0,
+        "recall_std": 0.0,
+        "f1_mean": 1.0,
+        "f1_std": 0.0,
+        "precision_mean": 1.0,
+        "precision_std": 0.0,
+        "interpretation": "Modèle robuste (faible variance)"
+      },
+      "auc_per_class": {
+        "MAM": 1.0,
+        "MAS": 1.0,
+        "Normal": 1.0,
+        "Overweight": 1.0
+      }
+    }
+  },
+  "breast_cancer": {
+    "module": "breast_cancer",
+    "n_test": 270,
+    "classes": [
+      "Benign",
+      "Malignant",
+      "Normal"
+    ],
+    "metrics": {
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "roc_auc": 1.0,
+      "false_negative_analysis": [
+        {
+          "class": "Benign",
+          "true_positives": 90,
+          "false_negatives": 0,
+          "false_negative_rate": 0.0,
+          "sensitivity": 1.0,
+          "medical_risk": "ACCEPTABLE"
+        },
+        {
+          "class": "Malignant",
+          "true_positives": 86,
+          "false_negatives": 0,
+          "false_negative_rate": 0.0,
+          "sensitivity": 1.0,
+          "medical_risk": "ACCEPTABLE"
+        },
+        {
+          "class": "Normal",
+          "true_positives": 94,
+          "false_negatives": 0,
+          "false_negative_rate": 0.0,
+          "sensitivity": 1.0,
+          "medical_risk": "ACCEPTABLE"
+        }
+      ],
+      "critical_classes": [],
+      "classification_report": {
+        "Benign": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 90.0
+        },
+        "Malignant": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 86.0
+        },
+        "Normal": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 94.0
+        },
+        "accuracy": 1.0,
+        "macro avg": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 270.0
+        },
+        "weighted avg": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 270.0
+        }
+      },
+      "auc_per_class": {
+        "Benign": 1.0,
+        "Malignant": 1.0,
+        "Normal": 1.0
+      }
+    }
+  },
+  "evaluated_at": "2026-05-18T10:25:49",
+  "medical_priority": "Minimiser faux négatifs — recall > precision",
+  "k_folds": 5
+}

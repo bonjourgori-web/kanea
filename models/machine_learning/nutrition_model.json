@@ -1,0 +1,68 @@
+{
+  "architecture": "RandomForest + XGBoost Ensemble (soft voting)",
+  "classes": [
+    "MAM",
+    "MAS",
+    "Normal",
+    "Overweight"
+  ],
+  "features": [
+    "age_months",
+    "weight_kg",
+    "height_cm",
+    "muac_cm",
+    "whz",
+    "haz",
+    "waz",
+    "bmi",
+    "sex_encoded"
+  ],
+  "class_weight": "balanced",
+  "rf_recall": 1.0,
+  "xgb_recall": 1.0,
+  "ensemble_acc": 1.0,
+  "ensemble_recall": 1.0,
+  "ensemble_f1": 1.0,
+  "report": {
+    "MAM": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 60.0
+    },
+    "MAS": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 20.0
+    },
+    "Normal": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 280.0
+    },
+    "Overweight": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 40.0
+    },
+    "accuracy": 1.0,
+    "macro avg": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 400.0
+    },
+    "weighted avg": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 400.0
+    }
+  },
+  "trained_at": "2026-05-18T09:51:51",
+  "reproducibility_seed": 42,
+  "task": "nutrition_classification_MAS_MAM_Normal_Overweight"
+}

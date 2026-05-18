@@ -1,0 +1,177 @@
+{
+  "malaria": {
+    "module": "malaria",
+    "source_dir": "C:\\Users\\HP\\gori\\KANEA\\data\\malaria",
+    "classes": [
+      "Parasitised",
+      "Uninfected"
+    ],
+    "bias_warnings": [
+      "⚠️ BIAIS GÉO : le dataset NIH/Kaggle contient principalement des cellules de patients du Bangladesh et de Colombie. Les morphologies plasmodiales africaines (P. falciparum dominant) peuvent différer — valider avec des images africaines.",
+      "⚠️ BIAIS COLORIMÉTRIE : les conditions de coloration (Giemsa) varient selon les laboratoires africains. Risque de drift de distribution."
+    ],
+    "ready": true,
+    "nb_samples": 27558,
+    "class_counts": {
+      "Parasitised": 13779,
+      "Uninfected": 13779
+    },
+    "balance": {
+      "per_class": {
+        "Parasitised": 13779,
+        "Uninfected": 13779
+      },
+      "percentages": {
+        "Parasitised": 50.0,
+        "Uninfected": 50.0
+      },
+      "total": 27558,
+      "ratio_max_min": 1.0,
+      "balanced": true,
+      "warnings": [],
+      "recommendation": "OK"
+    },
+    "integrity": {
+      "Parasitised": {
+        "total": 13779,
+        "checked": 150,
+        "corrupted": [],
+        "corruption_rate": 0.0
+      },
+      "Uninfected": {
+        "total": 13779,
+        "checked": 150,
+        "corrupted": [],
+        "corruption_rate": 0.0
+      }
+    },
+    "duplicates": 0,
+    "synthetic": false
+  },
+  "nutrition": {
+    "module": "nutrition",
+    "source": "C:\\Users\\HP\\gori\\KANEA\\data\\nutrition\\nutrition_dataset.csv",
+    "bias_warnings": [
+      "⚠️ BIAIS GÉO : standards OMS établis sur populations mixtes (MGRS, 8 pays). Les tables de référence peuvent ne pas refléter la variabilité génétique des populations sahéliennes et subsahariennes."
+    ],
+    "ready": true,
+    "nb_samples": 2000,
+    "columns": [
+      "age_months",
+      "sex",
+      "weight_kg",
+      "height_cm",
+      "muac_cm",
+      "whz",
+      "haz",
+      "waz",
+      "bmi",
+      "nutrition_status"
+    ],
+    "missing_columns": [],
+    "missing_values": {},
+    "duplicates": 0,
+    "class_distribution": {
+      "Normal": 1400,
+      "MAM": 300,
+      "Overweight": 200,
+      "MAS": 100
+    },
+    "balance": {
+      "per_class": {
+        "Normal": 1400,
+        "MAM": 300,
+        "Overweight": 200,
+        "MAS": 100
+      },
+      "percentages": {
+        "Normal": 70.0,
+        "MAM": 15.0,
+        "Overweight": 10.0,
+        "MAS": 5.0
+      },
+      "total": 2000,
+      "ratio_max_min": 14.0,
+      "balanced": false,
+      "warnings": [
+        "⚠️ CRITIQUE : déséquilibre 14.0x (Normal=1400 vs MAS=100) — utiliser class_weight + SMOTE"
+      ],
+      "recommendation": "class_weight='balanced' dans sklearn / CrossEntropyLoss(weight=…) dans PyTorch"
+    },
+    "outliers_zscore": {},
+    "sex_distribution": {
+      "M": 1014,
+      "F": 986
+    },
+    "age_distribution": {
+      "min": 6.0,
+      "max": 59.0,
+      "mean": 32.5,
+      "std": 15.6
+    }
+  },
+  "breast_cancer": {
+    "module": "breast_cancer",
+    "source_dir": "C:\\Users\\HP\\gori\\KANEA\\data\\breast_cancer",
+    "classes": [
+      "Normal",
+      "Benign",
+      "Malignant"
+    ],
+    "bias_warnings": [
+      "⚠️ DONNÉES SYNTHÉTIQUES détectées — ne pas déployer sans validation clinique.",
+      "⚠️ BIAIS RACIAL : CBIS-DDSM (USA) et MIAS (UK) contiennent principalement des patientes caucasiennes. La densité mammaire africaine est statistiquement plus élevée (BI-RADS 3-4), ce qui affecte la sensibilité des modèles CNN.",
+      "⚠️ BIAIS TECHNOLOGIQUE : les mammographies africaines sont souvent analogiques (résolution plus faible). Un modèle entraîné sur FFDM numérique peut dégrader.",
+      "⚠️ BIAIS STADE : en Afrique subsaharienne, les cancers sont détectés à un stade plus avancé (stade III-IV dominant). L'entraînement sur stades précoces peut sous-performer."
+    ],
+    "ready": true,
+    "nb_samples": 450,
+    "class_counts": {
+      "Normal": 150,
+      "Benign": 150,
+      "Malignant": 150
+    },
+    "balance": {
+      "per_class": {
+        "Normal": 150,
+        "Benign": 150,
+        "Malignant": 150
+      },
+      "percentages": {
+        "Normal": 33.3,
+        "Benign": 33.3,
+        "Malignant": 33.3
+      },
+      "total": 450,
+      "ratio_max_min": 1.0,
+      "balanced": true,
+      "warnings": [],
+      "recommendation": "OK"
+    },
+    "integrity": {
+      "Normal": {
+        "total": 150,
+        "checked": 100,
+        "corrupted": [],
+        "corruption_rate": 0.0
+      },
+      "Benign": {
+        "total": 150,
+        "checked": 100,
+        "corrupted": [],
+        "corruption_rate": 0.0
+      },
+      "Malignant": {
+        "total": 150,
+        "checked": 100,
+        "corrupted": [],
+        "corruption_rate": 0.0
+      }
+    },
+    "duplicates": 0,
+    "synthetic": true
+  },
+  "validated_at": "2026-05-18T10:31:08",
+  "all_ready": true,
+  "total_samples": 30008
+}

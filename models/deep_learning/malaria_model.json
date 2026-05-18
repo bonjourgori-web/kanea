@@ -1,0 +1,34 @@
+{
+  "architecture": "EfficientNet-B0",
+  "classes": ["Parasitised", "Uninfected"],
+  "n_classes": 2,
+  "best_val_recall": 0.959,
+  "best_epoch": 1,
+  "epochs_run": 1,
+  "epochs_max": 20,
+  "early_stopped": false,
+  "training_interrupted": true,
+  "dropout": 0.35,
+  "label_smoothing": 0.05,
+  "batch_size": 32,
+  "lr": 0.001,
+  "patience": 5,
+  "trained_at": "2026-05-18T13:45:18",
+  "reproducibility_seed": 42,
+  "task": "malaria_binary_classification",
+  "dataset": "NIH/Kaggle",
+  "dataset_size": 82674,
+  "note": "Entraînement interrompu après l'époque 1 — modèle fonctionnel (val_recall=0.959, val_acc=95.9%). Reprendre avec python main.py --module malaria --skip-download --skip-validate --skip-preprocess",
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": null,
+      "train_acc": 94.5,
+      "train_recall": null,
+      "val_loss": null,
+      "val_acc": 95.9,
+      "val_recall": 0.959,
+      "lr": 0.000990
+    }
+  ]
+}

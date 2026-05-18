@@ -1,0 +1,26 @@
+KANEA/
+|-- assets/
+|   `-- branding/
+|       |-- README.md
+|       `-- kanea_logo.png
+|-- api/
+|-- dashboard/
+|-- data/
+|   |-- malaria/
+|   |-- nutrition/
+|   `-- forensic/
+|-- docs/
+|   |-- project_overview.md
+|   `-- structure.txt
+|-- models/
+|   |-- deep_learning/
+|   `-- machine_learning/
+|-- modules/
+|   |-- malaria_dl/
+|   |-- nutrition_ml/
+|   |-- bioid_ml/
+|   `-- integration/
+|-- notebooks/
+|-- tests/
+|-- README.md
+`-- requirements.txt
