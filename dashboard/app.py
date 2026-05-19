@@ -119,8 +119,34 @@ def inject_styles() -> None:
         }
 
         .stApp {
-            background: var(--bg) !important;
+            background: transparent !important;
             color: var(--ink) !important;
+        }
+
+        /* ── Header/toolbar transparents ───────────────────────────────────── */
+        [data-testid="stToolbar"],
+        [data-testid="stDecoration"],
+        header[data-testid="stHeader"] {
+            background: transparent !important;
+        }
+
+        /* ── Cards en verre dépoli (frosted glass) ───────────────────────── */
+        .section-card {
+            background: rgba(255,255,255,0.82) !important;
+            backdrop-filter: blur(12px) !important;
+            -webkit-backdrop-filter: blur(12px) !important;
+            border: 1px solid rgba(255,255,255,0.6) !important;
+        }
+        .kpi-card {
+            background: rgba(255,255,255,0.80) !important;
+            backdrop-filter: blur(10px) !important;
+            -webkit-backdrop-filter: blur(10px) !important;
+            border: 1px solid rgba(255,255,255,0.55) !important;
+        }
+        /* Zone principale légèrement voilée */
+        .block-container {
+            background: rgba(247,249,252,0.35) !important;
+            border-radius: 20px;
         }
 
         /* ── Expander header layout ──────────────────────────────────────── */
@@ -536,8 +562,74 @@ def inject_styles() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# FOND ANIMÉ — MOLÉCULES ANTI-GRAVITÉ
+# FOND ANIMÉ — IMAGE SCIENTIFIQUE + MOLÉCULES ANTI-GRAVITÉ
 # ═══════════════════════════════════════════════════════════════════════════════
+
+def inject_science_background() -> None:
+    """Injecte l'image bg_science.png comme fond fixe animé (zoom lent + shimmer)."""
+    bg_path = Path(__file__).resolve().parents[1] / "assets" / "branding" / "bg_science.png"
+    if not bg_path.exists():
+        return
+    bg_b64 = base64.b64encode(bg_path.read_bytes()).decode()
+    components.html(
+        f"""
+        <script>
+        (function() {{
+          var doc = window.parent.document;
+          if (doc.getElementById('kanea-science-bg')) return;
+
+          /* ── Animations CSS ───────────────────────────────────────────── */
+          var st = doc.createElement('style');
+          st.id = 'kanea-science-style';
+          st.textContent = `
+            @keyframes kaneaZoom {{
+              from {{ transform: scale(1)    translateZ(0); }}
+              to   {{ transform: scale(1.10) translateZ(0); }}
+            }}
+            @keyframes kaneaPulse {{
+              0%,100% {{ opacity: 0.93; }}
+              50%      {{ opacity: 1;    }}
+            }}
+            #kanea-science-bg {{
+              position   : fixed;
+              top        : -6%; left: -6%;
+              width      : 112%; height: 112%;
+              background : url('data:image/png;base64,{bg_b64}') center/cover no-repeat;
+              z-index    : -10;
+              animation  : kaneaZoom 30s ease-in-out infinite alternate,
+                           kaneaPulse 10s ease-in-out infinite;
+              will-change: transform, opacity;
+            }}
+            #kanea-overlay {{
+              position  : fixed;
+              top: 0; left: 0; width: 100%; height: 100%;
+              background: linear-gradient(
+                135deg,
+                rgba(240,255,254,0.28) 0%,
+                rgba(255,255,255,0.08) 45%,
+                rgba(20,0,50,0.18)  100%
+              );
+              z-index: -9;
+              pointer-events: none;
+            }}
+          `;
+          doc.head.appendChild(st);
+
+          /* ── Div image de fond ────────────────────────────────────────── */
+          var bg = doc.createElement('div');
+          bg.id = 'kanea-science-bg';
+          doc.body.insertBefore(bg, doc.body.firstChild);
+
+          /* ── Overlay de lisibilité ────────────────────────────────────── */
+          var ov = doc.createElement('div');
+          ov.id = 'kanea-overlay';
+          doc.body.insertBefore(ov, doc.body.children[1] || null);
+        }})();
+        </script>
+        """,
+        height=0,
+    )
+
 
 def inject_molecule_background() -> None:
     """Canvas HTML5 fixe avec molécules 3D ball-and-stick en apesanteur.
@@ -571,7 +663,7 @@ def inject_molecule_background() -> None:
           cv.style.cssText = [
             'position:fixed', 'top:0', 'left:0',
             'width:100vw', 'height:100vh',
-            'z-index:-10', 'pointer-events:none'
+            'z-index:-8', 'pointer-events:none'
           ].join(';');
           doc.body.insertBefore(cv, doc.body.firstChild);
 
@@ -757,11 +849,9 @@ def inject_molecule_background() -> None:
             }
           }
 
-          /* ── Boucle d'animation ──────────────────────────────────────────── */
+          /* ── Boucle d'animation (pas de fond — image réelle derrière) ────── */
           function frame() {
             ctx.clearRect(0, 0, cv.width, cv.height);
-            drawBG();
-            drawBokeh();
             updateMols();
             for (var i = 0; i < mols.length; i++) drawMol(mols[i]);
             requestAnimationFrame(frame);
@@ -1633,6 +1723,8 @@ def render_cta() -> None:
 
 def main() -> None:
     inject_styles()
+    inject_science_background()
+    inject_molecule_background()
 
     if not _MODULES_OK:
         st.error(f"Erreur de chargement des modules internes : {_MODULES_ERR}")
