@@ -29,12 +29,27 @@ import plotly.io as pio
 # ── Thème Plotly global : texte sombre lisible sur fond clair ─────────────────
 pio.templates["kanea"] = go.layout.Template(
     layout=go.Layout(
-        font=dict(color="#1A2B3C", family="Inter, sans-serif"),
-        title_font=dict(color="#1A2B3C"),
-        xaxis=dict(tickfont=dict(color="#1A2B3C"), title_font=dict(color="#1A2B3C"), linecolor="#DDE8EE"),
-        yaxis=dict(tickfont=dict(color="#1A2B3C"), title_font=dict(color="#1A2B3C"), linecolor="#DDE8EE"),
-        legend=dict(font=dict(color="#1A2B3C")),
-        coloraxis=dict(colorbar=dict(tickfont=dict(color="#1A2B3C"), title_font=dict(color="#1A2B3C"))),
+        paper_bgcolor="rgba(255,255,255,0.88)",
+        plot_bgcolor="rgba(255,255,255,0.0)",
+        font=dict(color="#1A2B3C", family="Inter, sans-serif", size=12),
+        title_font=dict(color="#1A2B3C", size=14),
+        xaxis=dict(
+            tickfont=dict(color="#1A2B3C", size=12),
+            title_font=dict(color="#1A2B3C"),
+            linecolor="#DDE8EE",
+            gridcolor="#EEF2F6",
+        ),
+        yaxis=dict(
+            tickfont=dict(color="#1A2B3C", size=12),
+            title_font=dict(color="#1A2B3C"),
+            linecolor="#DDE8EE",
+            gridcolor="#EEF2F6",
+        ),
+        legend=dict(font=dict(color="#1A2B3C", size=12)),
+        coloraxis=dict(colorbar=dict(
+            tickfont=dict(color="#1A2B3C"),
+            title_font=dict(color="#1A2B3C"),
+        )),
     )
 )
 pio.templates.default = "plotly_white+kanea"
@@ -51,6 +66,17 @@ try:
 except Exception as _e:
     _MODULES_OK = False
     _MODULES_ERR = str(_e)
+    # Fallbacks pour éviter NameError si l'import échoue
+    def multibio_predict(**kw): return {"results": {}, "status": "module_unavailable"}
+    def load_health_data(): import pandas as pd; return pd.DataFrame()
+    def load_climate_data(): import pandas as pd; return pd.DataFrame()
+    def render_stats_tab(*a, **kw): pass
+    def render_climate_tab(*a, **kw): pass
+    def render_map_tab(*a, **kw): pass
+    def get_climate(*a, **kw): return None
+    def predict_risk(*a, **kw): return 0.0
+    def alert_system(*a, **kw): return "OK"
+    CIV_CITIES = {}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1035,11 +1061,11 @@ def _chart_animated_maladies(health_df: pd.DataFrame) -> go.Figure:
         showlegend=False,
         height=420,
         title_font_size=15,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(255,255,255,0.88)",
+        plot_bgcolor="rgba(255,255,255,0.0)",
         font=dict(color="#1A2B3C", family="Inter, sans-serif"),
-        xaxis=dict(showgrid=False, tickfont=dict(color="#1A2B3C"), title_font=dict(color="#1A2B3C")),
-        yaxis=dict(gridcolor="#EEF2F6", tickfont=dict(color="#1A2B3C"), title_font=dict(color="#1A2B3C")),
+        xaxis=dict(showgrid=False, tickfont=dict(color="#1A2B3C", size=12), title_font=dict(color="#1A2B3C")),
+        yaxis=dict(gridcolor="#DDE8EE", tickfont=dict(color="#1A2B3C", size=12), title_font=dict(color="#1A2B3C")),
     )
     fig.layout.updatemenus[0].buttons[0].args[1]["frame"]["duration"] = 400
     fig.layout.updatemenus[0].buttons[0].args[1]["transition"]["duration"] = 200
@@ -1078,10 +1104,11 @@ def _chart_scatter_climat_paludisme(
         template="plotly_white",
         height=420,
         title_font_size=15,
-        paper_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(255,255,255,0.88)",
+        plot_bgcolor="rgba(255,255,255,0.0)",
         font=dict(color="#1A2B3C", family="Inter, sans-serif"),
-        xaxis=dict(tickfont=dict(color="#1A2B3C"), title_font=dict(color="#1A2B3C")),
-        yaxis=dict(tickfont=dict(color="#1A2B3C"), title_font=dict(color="#1A2B3C")),
+        xaxis=dict(tickfont=dict(color="#1A2B3C", size=12), title_font=dict(color="#1A2B3C")),
+        yaxis=dict(tickfont=dict(color="#1A2B3C", size=12), title_font=dict(color="#1A2B3C")),
         coloraxis_colorbar=dict(title="Humidité %", len=0.6, tickfont=dict(color="#1A2B3C")),
     )
     return fig
@@ -1724,7 +1751,6 @@ def render_cta() -> None:
 def main() -> None:
     inject_styles()
     inject_science_background()
-    inject_molecule_background()
 
     if not _MODULES_OK:
         st.error(f"Erreur de chargement des modules internes : {_MODULES_ERR}")
