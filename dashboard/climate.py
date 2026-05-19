@@ -300,15 +300,21 @@ def _chart_seasonality(climate_df: pd.DataFrame, region: str) -> go.Figure:
 # CLIMAT EN TEMPS RÉEL · PRÉDICTION · ALERTES
 # ═══════════════════════════════════════════════════════════════════════════════
 
+_WMO_CONDITIONS = {
+    0: "Ciel dégagé", 1: "Principalement dégagé", 2: "Partiellement nuageux", 3: "Couvert",
+    45: "Brouillard", 48: "Brouillard givrant",
+    51: "Bruine légère", 53: "Bruine modérée", 55: "Bruine dense",
+    61: "Pluie légère", 63: "Pluie modérée", 65: "Pluie forte",
+    71: "Neige légère", 73: "Neige modérée", 75: "Neige forte",
+    80: "Averses légères", 81: "Averses modérées", 82: "Averses violentes",
+    95: "Orage", 96: "Orage avec grêle", 99: "Orage violent",
+}
+
 @st.cache_data(ttl=300)
 def get_climate(lat: float, lon: float) -> dict | None:
     """
-    Récupère température, pluie et humidité en temps réel via Open-Meteo.
-
-    Args:
-        lat, lon : coordonnées GPS de la ville
-    Returns:
-        dict avec keys temperature, rainfall, humidity — ou None si indisponible
+    Récupère météo complète en temps réel via Open-Meteo (source identique à MSN/météo).
+    Retourne conditions actuelles + prévisions 7 jours.
     """
     try:
         resp = requests.get(
@@ -316,17 +322,45 @@ def get_climate(lat: float, lon: float) -> dict | None:
             params={
                 "latitude":  lat,
                 "longitude": lon,
-                "current":   "temperature_2m,relative_humidity_2m,precipitation",
-                "timezone":  "Africa/Abidjan",
+                "current": (
+                    "temperature_2m,apparent_temperature,relative_humidity_2m,"
+                    "precipitation,wind_speed_10m,surface_pressure,weather_code"
+                ),
+                "daily": (
+                    "temperature_2m_max,temperature_2m_min,"
+                    "precipitation_sum,precipitation_probability_max,weather_code"
+                ),
+                "timezone":      "auto",
+                "forecast_days": 7,
             },
-            timeout=6,
+            timeout=8,
         )
         resp.raise_for_status()
-        cur = resp.json()["current"]
+        data = resp.json()
+        cur  = data["current"]
+        day  = data["daily"]
+
+        code = cur.get("weather_code", 0)
+        forecast = []
+        for i in range(len(day["time"])):
+            forecast.append({
+                "date":      day["time"][i],
+                "t_max":     day["temperature_2m_max"][i],
+                "t_min":     day["temperature_2m_min"][i],
+                "pluie":     day["precipitation_sum"][i],
+                "prob_pluie":day["precipitation_probability_max"][i],
+                "condition": _WMO_CONDITIONS.get(day["weather_code"][i], "—"),
+            })
+
         return {
-            "temperature": cur["temperature_2m"],
-            "humidity":    cur["relative_humidity_2m"],
-            "rainfall":    cur["precipitation"],
+            "temperature":  cur["temperature_2m"],
+            "ressenti":     cur["apparent_temperature"],
+            "humidity":     cur["relative_humidity_2m"],
+            "rainfall":     cur["precipitation"],
+            "wind":         cur["wind_speed_10m"],
+            "pressure":     cur["surface_pressure"],
+            "condition":    _WMO_CONDITIONS.get(code, "—"),
+            "forecast":     forecast,
         }
     except Exception:
         return None

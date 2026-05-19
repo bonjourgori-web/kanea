@@ -1114,25 +1114,65 @@ def _chart_scatter_climat_paludisme(
     return fig
 
 
+def _inject_geolocation() -> None:
+    """Demande la position GPS du navigateur et la stocke dans st.query_params."""
+    components.html(
+        """
+        <script>
+        (function() {
+          if (!navigator.geolocation) return;
+          navigator.geolocation.getCurrentPosition(function(pos) {
+            var lat = pos.coords.latitude.toFixed(4);
+            var lon = pos.coords.longitude.toFixed(4);
+            var url = new URL(window.parent.location.href);
+            if (url.searchParams.get('geo_lat') !== lat ||
+                url.searchParams.get('geo_lon') !== lon) {
+              url.searchParams.set('geo_lat', lat);
+              url.searchParams.set('geo_lon', lon);
+              window.parent.location.replace(url.toString());
+            }
+          }, function() {}, { timeout: 5000 });
+        })();
+        </script>
+        """,
+        height=0,
+    )
+
+
 def page_dashboard(health_df: pd.DataFrame, climate_df: pd.DataFrame) -> None:
+    # ── Géolocalisation : utilise la position GPS du navigateur si dispo ───────
+    _inject_geolocation()
+    params  = st.query_params
+    geo_lat = params.get("geo_lat")
+    geo_lon = params.get("geo_lon")
+
+    if geo_lat and geo_lon:
+        try:
+            lat, lon = float(geo_lat), float(geo_lon)
+            location_label = f"📍 Position détectée ({lat:.2f}°, {lon:.2f}°)"
+        except ValueError:
+            lat, lon = 5.3204, -4.0161
+            location_label = "Abidjan · CIV"
+    else:
+        lat, lon = 5.3204, -4.0161
+        location_label = "Abidjan · CIV (par défaut)"
+
     # En-tête
     st.markdown(
-        """
+        f"""
         <div class="page-header">
             <h1>📊 Dashboard KANÉA</h1>
-            <p>Vue temps réel · Côte d'Ivoire · Données épidémio &amp; climatiques</p>
+            <p>Vue temps réel · {location_label} · Données épidémio &amp; climatiques</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    # ── Données temps réel pour la ville par défaut ────────────────────────────
-    default_city = "Abidjan"
-    city_meta    = CIV_CITIES[default_city]
-    climate_rt   = get_climate(city_meta["lat"], city_meta["lon"])
+    # ── Météo temps réel (Open-Meteo — même source que MSN Météo) ─────────────
+    climate_rt = get_climate(lat, lon)
 
-    temp_val  = f"{climate_rt['temperature']:.0f}°C"  if climate_rt else "28°C"
-    pluie_val = f"{climate_rt['rainfall']:.0f} mm"    if climate_rt else "120 mm"
+    temp_val  = f"{climate_rt['temperature']:.0f}°C"   if climate_rt else "—"
+    pluie_val = f"{climate_rt['rainfall']:.1f} mm"      if climate_rt else "—"
     risk_val  = "—"
     risk_sub  = "Données live non dispo"
     risk_color = "orange"
@@ -1146,26 +1186,51 @@ def page_dashboard(health_df: pd.DataFrame, climate_df: pd.DataFrame) -> None:
 
     # Cas paludisme total
     total_cas = health_df[health_df["maladie"] == "Paludisme"]["cas"].sum()
-    regions_risque = (
-        health_df[health_df["maladie"] == "Paludisme"]
-        .groupby("region")["incidence"].mean()
-        .sort_values(ascending=False)
-        .head(1)
-        .index[0]
-    )
 
     # ── KPI CARDS ─────────────────────────────────────────────────────────────
     col1, col2, col3, col4, col5 = st.columns(5)
+
+    ressenti  = f"Ressenti {climate_rt['ressenti']:.0f}°C" if climate_rt and "ressenti" in climate_rt else "live"
+    condition = climate_rt.get("condition", "live") if climate_rt else "live"
+    vent      = f"Vent {climate_rt['wind']:.0f} km/h" if climate_rt and "wind" in climate_rt else ""
+    humidite  = f"Humidité {climate_rt['humidity']:.0f}%" if climate_rt else ""
+
     kpis = [
-        (col1, "🌡️", "Température", temp_val,              f"{default_city} · live", "blue"),
-        (col2, "🌧️", "Pluviométrie", pluie_val,            "Précipitations actuelles", "blue"),
-        (col3, "⚠️", "Risque IA",    risk_val,              risk_sub,                 risk_color),
-        (col4, "🦠", "Cas paludisme", f"{total_cas:,}".replace(",", " "), "Total 2021-2023", "red"),
-        (col5, "📍", "Zone critique", regions_risque,       "Incidence la + haute",  "orange"),
+        (col1, "🌡️", "Température",  temp_val,  ressenti,                         "blue"),
+        (col2, "🌧️", "Précipitations", pluie_val, condition,                       "blue"),
+        (col3, "💨", "Vent · Humidité", vent,     humidite,                         "teal"),
+        (col4, "⚠️", "Risque IA",     risk_val,  risk_sub,                          risk_color),
+        (col5, "🦠", "Cas paludisme", f"{total_cas:,}".replace(",", " "), "2021-2023", "red"),
     ]
     for col, icon, label, value, sub, color in kpis:
         with col:
             st.markdown(_kpi_card(icon, label, value, sub, color), unsafe_allow_html=True)
+
+    # ── Prévisions 7 jours ────────────────────────────────────────────────────
+    if climate_rt and climate_rt.get("forecast"):
+        st.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
+        fcols = st.columns(7)
+        for i, (fc, day) in enumerate(zip(fcols, climate_rt["forecast"])):
+            import datetime as _dt
+            try:
+                d = _dt.date.fromisoformat(day["date"])
+                label_j = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"][d.weekday()]
+                label_j = "Auj." if i == 0 else label_j
+            except Exception:
+                label_j = f"J+{i}"
+            with fc:
+                st.markdown(
+                    f"""<div style='text-align:center;background:rgba(255,255,255,0.82);
+                    border-radius:14px;padding:0.6rem 0.3rem;border:1px solid rgba(255,255,255,0.6);
+                    backdrop-filter:blur(8px);'>
+                    <div style='font-size:0.75rem;font-weight:700;color:#5E7A8A;'>{label_j}</div>
+                    <div style='font-size:1.1rem;'>{"🌧️" if day["prob_pluie"]>50 else "☀️" if day["prob_pluie"]<20 else "⛅"}</div>
+                    <div style='font-size:0.9rem;font-weight:700;color:#1A2B3C;'>{day["t_max"]:.0f}°</div>
+                    <div style='font-size:0.75rem;color:#5E7A8A;'>{day["t_min"]:.0f}°</div>
+                    <div style='font-size:0.68rem;color:#2E86DE;'>{day["prob_pluie"]:.0f}%</div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
 
     st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
 
