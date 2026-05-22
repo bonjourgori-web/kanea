@@ -28,7 +28,7 @@ def test_multibio_predict_with_nutrition() -> None:
 def test_predict_malaria_without_model_returns_scaffold() -> None:
     result = predict_malaria("sample.png")
     assert result["module"] == "module_1_malaria"
-    assert result["expected_model_path"] == "models/deep_learning/malaria_model.pkl"
+    assert result["expected_model_path"] == "models/deep_learning/malaria_model.pth"
 
 
 def test_predict_bioid_without_model_returns_scaffold() -> None:

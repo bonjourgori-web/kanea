@@ -62,6 +62,7 @@ try:
     from dashboard.climate import load_climate_data, render_climate_tab, get_climate, predict_risk, alert_system
     from dashboard.maps import CIV_CITIES, render_map_tab
     from modules.integration.engine import multibio_predict
+    from dashboard.export_pdf import build_pdf_report
     _MODULES_OK = True
 except Exception as _e:
     _MODULES_OK = False
@@ -897,16 +898,19 @@ def inject_molecule_background() -> None:
 
 @st.cache_data(ttl=600)
 def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Point d'entrée unique des données.
-    Branche ici ton vrai DataFrame si besoin.
+    """Charge les données épidémiologiques et climatiques (avec fallback vide)."""
+    try:
+        health_df = load_health_data()
+    except Exception as e:
+        st.warning(f"⚠️ Données santé non disponibles : {e}")
+        health_df = pd.DataFrame()
 
-    Returns
-    -------
-    (health_df, climate_df)
-    """
-    health_df  = load_health_data()
-    climate_df = load_climate_data()
+    try:
+        climate_df = load_climate_data()
+    except Exception as e:
+        st.warning(f"⚠️ Données climatiques non disponibles : {e}")
+        climate_df = pd.DataFrame()
+
     return health_df, climate_df
 
 
@@ -1185,7 +1189,10 @@ def page_dashboard(health_df: pd.DataFrame, climate_df: pd.DataFrame) -> None:
         risk_color = "red" if alert == "ALERTE" else "green"
 
     # Cas paludisme total
-    total_cas = health_df[health_df["maladie"] == "Paludisme"]["cas"].sum()
+    total_cas = (
+        health_df[health_df["maladie"] == "Paludisme"]["cas"].sum()
+        if not health_df.empty else 0
+    )
 
     # ── KPI CARDS ─────────────────────────────────────────────────────────────
     col1, col2, col3, col4, col5 = st.columns(5)
@@ -1233,6 +1240,10 @@ def page_dashboard(health_df: pd.DataFrame, climate_df: pd.DataFrame) -> None:
                 )
 
     st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
+
+    if health_df.empty or climate_df.empty:
+        st.warning("⚠️ Données insuffisantes pour afficher les graphiques.")
+        return
 
     # ── GRAPHIQUES ────────────────────────────────────────────────────────────
     col_l, col_r = st.columns(2, gap="medium")
@@ -1357,21 +1368,37 @@ def _render_paludisme() -> None:
                 prediction = pred.get("prediction")
                 confidence = pred.get("confidence")
 
+                expl     = pred.get("explainability", {})
+                gradcam  = expl.get("heatmap_b64")
+
                 if prediction == "Parasitised":
                     st.markdown(
                         f"<div class='alert-high'>🔴 Résultat : <strong>PARASITISÉ</strong>"
-                        f"{'  ·  Confiance : ' + f'{confidence:.1%}' if confidence else ''}</div>",
+                        f"{'  ·  Confiance : ' + f'{confidence:.1%}' if confidence else ''}"
+                        "<br><small>Présence de Plasmodium détectée — consultation médicale recommandée.</small></div>",
                         unsafe_allow_html=True,
                     )
                 elif prediction == "Uninfected":
                     st.markdown(
                         f"<div class='alert-ok'>🟢 Résultat : <strong>NON INFECTÉ</strong>"
-                        f"{'  ·  Confiance : ' + f'{confidence:.1%}' if confidence else ''}</div>",
+                        f"{'  ·  Confiance : ' + f'{confidence:.1%}' if confidence else ''}"
+                        "<br><small>Globules rouges sains — pas de Plasmodium détecté.</small></div>",
                         unsafe_allow_html=True,
                     )
                 else:
-                    st.info("ℹ️ Modèle non encore entraîné — résultat placeholder.")
+                    st.info("ℹ️ Modèle non encore entraîné — résultat placeholder. "
+                            "Lancer `python scripts/train_malaria_pytorch.py`")
 
+                if gradcam:
+                    st.markdown("**🔥 Carte Grad-CAM — zones d'activation ResNet34**")
+                    st.markdown(
+                        f'<img src="data:image/png;base64,{gradcam}" '
+                        'style="width:100%;border-radius:12px;border:1px solid #DDE8EE;" '
+                        'alt="Grad-CAM heatmap"/>',
+                        unsafe_allow_html=True,
+                    )
+
+                _download_report(pred, "malaria", "dl_malaria")
                 with st.expander("Réponse JSON complète"):
                     st.json(result)
         else:
@@ -1406,33 +1433,129 @@ def _render_nutrition() -> None:
         unsafe_allow_html=True,
     )
 
-    with st.spinner("Chargement du module Nutrition..."):
-        time.sleep(0.3)
+    _NUTRI_INFO = {
+        "severe_undernutrition":   ("🔴", "#E74C3C", "#FDECEA", "Malnutrition sévère (MAS)",   "Prise en charge thérapeutique urgente (CRENI/CRENAS)"),
+        "moderate_undernutrition": ("🟠", "#E67E22", "#FEF0E7", "Malnutrition modérée (MAM)",  "Supplémentation nutritionnelle thérapeutique (CSPS)"),
+        "normal":                  ("🟢", "#27AE60", "#E9F7EF", "Statut nutritionnel normal",  "Maintien de l'alimentation diversifiée"),
+        "overweight":              ("🟡", "#F1C40F", "#FEFDE7", "Surpoids",                    "Suivi diététique et activité physique adaptée"),
+        "obesity":                 ("🔴", "#C0392B", "#FDECEA", "Obésité",                     "Prise en charge nutritionnelle spécialisée"),
+    }
 
-    col1, col2, col3 = st.columns(3)
-    age_months = col1.number_input("Âge (mois)", 0, 240, 24)
-    weight_kg  = col2.number_input("Poids (kg)", 0.0, 150.0, 12.0, step=0.1)
-    height_cm  = col3.number_input("Taille (cm)", 0.0, 250.0, 85.0, step=0.5)
+    col_form, col_info = st.columns([1.5, 1], gap="large")
 
-    col4, col5, col6, col7 = st.columns(4)
-    sex    = col4.selectbox("Sexe", ["F", "M"])
-    muac   = col5.number_input("MUAC (cm)", 0.0, 50.0, 13.5, step=0.1)
-    waz    = col6.number_input("WAZ", -6.0, 6.0, 0.0, step=0.1)
-    haz    = col7.number_input("HAZ", -6.0, 6.0, 0.0, step=0.1)
-    whz    = st.number_input("WHZ", -6.0, 6.0, 0.0, step=0.1)
+    with col_form:
+        st.markdown("<div class='section-card'><div class='section-title'>📋 Données anthropométriques</div>", unsafe_allow_html=True)
+        col1, col2, col3 = st.columns(3)
+        age_months = col1.number_input("Âge (mois)", 0, 240, 24)
+        weight_kg  = col2.number_input("Poids (kg)", 0.0, 150.0, 12.0, step=0.1)
+        height_cm  = col3.number_input("Taille (cm)", 0.0, 250.0, 85.0, step=0.5)
 
-    if st.button("📊 Analyser le statut nutritionnel", use_container_width=True):
-        with st.spinner("🧠 Analyse nutritionnelle en cours..."):
-            time.sleep(0.6)
-            result = multibio_predict(nutrition_data={
-                "age_months": age_months, "weight_kg": weight_kg,
-                "height_cm": height_cm,  "sex": sex,
-                "muac_cm": muac,         "waz": waz,
-                "haz": haz,              "whz": whz,
-            })
-        st.success("✅ Analyse terminée")
-        with st.expander("Résultats JSON"):
-            st.json(result)
+        col4, col5 = st.columns(2)
+        sex  = col4.selectbox("Sexe", ["F", "M"])
+        muac = col5.number_input("MUAC (cm)", 0.0, 50.0, 13.5, step=0.1)
+
+        st.markdown("**Z-scores OMS** *(facultatifs — calculés automatiquement si absents)*")
+        col6, col7, col8 = st.columns(3)
+        waz = col6.number_input("WAZ (P/A)", -6.0, 6.0, 0.0, step=0.1, help="Poids-pour-âge")
+        haz = col7.number_input("HAZ (T/A)", -6.0, 6.0, 0.0, step=0.1, help="Taille-pour-âge")
+        whz = col8.number_input("WHZ (P/T)", -6.0, 6.0, 0.0, step=0.1, help="Poids-pour-taille")
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        if st.button("📊 Analyser le statut nutritionnel", use_container_width=True):
+            if weight_kg <= 0 or height_cm <= 0:
+                st.error("⚠️ Poids et taille doivent être supérieurs à 0.")
+            else:
+                with st.spinner("🧠 Analyse nutritionnelle en cours — RF + XGBoost..."):
+                    time.sleep(0.6)
+                    try:
+                        result = multibio_predict(nutrition_data={
+                            "age_months": age_months, "weight_kg": weight_kg,
+                            "height_cm": height_cm,  "sex": sex,
+                            "muac_cm": muac,         "waz": waz,
+                            "haz": haz,              "whz": whz,
+                        })
+                    except Exception as e:
+                        st.error(f"Erreur lors de l'analyse : {e}")
+                        result = None
+
+                if result:
+                    pred_data  = result.get("results", {}).get("module_2_biometry", {})
+                    prediction = pred_data.get("prediction")
+                    confidence = pred_data.get("confidence")
+                    derived    = pred_data.get("derived_features", {})
+                    bmi        = derived.get("bmi")
+
+                    if prediction and prediction in _NUTRI_INFO:
+                        icon, color, bg, label, reco = _NUTRI_INFO[prediction]
+                        st.markdown(
+                            f"""<div style='background:{bg};border-left:5px solid {color};
+                            border-radius:0 14px 14px 0;padding:1.2rem 1.4rem;margin:0.8rem 0;'>
+                            <div style='font-size:1.3rem;font-weight:800;color:{color};'>
+                                {icon} {label}
+                            </div>
+                            {"<div style='font-size:0.9rem;color:#5E7A8A;margin-top:0.3rem;'>Confiance : <b>" + f"{confidence:.1%}" + "</b></div>" if confidence else ""}
+                            <div style='font-size:0.88rem;margin-top:0.5rem;color:#1A2B3C;'>
+                                💡 <strong>Recommandation :</strong> {reco}
+                            </div></div>""",
+                            unsafe_allow_html=True,
+                        )
+
+                        # Z-scores gauge
+                        cols_z = st.columns(4)
+                        for col_z, (label_z, val) in zip(
+                            cols_z,
+                            [("WAZ", waz), ("HAZ", haz), ("WHZ", whz), ("BMI", bmi or 0)],
+                        ):
+                            z_color = "#E74C3C" if val < -2 else ("#F39C12" if val < -1 else "#27AE60")
+                            with col_z:
+                                st.markdown(
+                                    f"""<div style='text-align:center;background:rgba(255,255,255,0.9);
+                                    border-radius:12px;padding:0.7rem;border:1px solid #DDE8EE;'>
+                                    <div style='font-size:0.72rem;font-weight:700;color:#5E7A8A;
+                                    text-transform:uppercase;'>{label_z}</div>
+                                    <div style='font-size:1.5rem;font-weight:800;color:{z_color};'>{val:.1f}</div>
+                                    </div>""",
+                                    unsafe_allow_html=True,
+                                )
+                    else:
+                        st.info("ℹ️ Modèle non encore entraîné — résultat placeholder. "
+                                "Lancer `python scripts/train_biometry_model.py`")
+
+                    _download_report(pred_data, "nutrition", "dl_nutrition")
+                    with st.expander("Réponse JSON complète"):
+                        st.json(result)
+
+    with col_info:
+        st.markdown(
+            """
+            <div class="section-card">
+                <div class="section-title">📏 Référentiel OMS</div>
+                <table style="width:100%; font-size:0.84rem; border-collapse:collapse;">
+                    <tr style="border-bottom:1px solid #DDE8EE;">
+                        <td style="padding:0.4rem 0; color:#E74C3C; font-weight:700;">🔴 MAS</td>
+                        <td style="padding:0.4rem 0; color:#5E7A8A;">WHZ &lt; -3 ou MUAC &lt; 11.5</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #DDE8EE;">
+                        <td style="padding:0.4rem 0; color:#E67E22; font-weight:700;">🟠 MAM</td>
+                        <td style="padding:0.4rem 0; color:#5E7A8A;">WHZ -3 à -2 ou MUAC 11.5–12.5</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #DDE8EE;">
+                        <td style="padding:0.4rem 0; color:#27AE60; font-weight:700;">🟢 Normal</td>
+                        <td style="padding:0.4rem 0; color:#5E7A8A;">WHZ -2 à +2</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:0.4rem 0; color:#F1C40F; font-weight:700;">🟡 Surpoids</td>
+                        <td style="padding:0.4rem 0; color:#5E7A8A;">WHZ &gt; +2</td>
+                    </tr>
+                </table>
+            </div>
+            <div class='disclaimer' style='margin-top:0.8rem;'>
+                ⚠️ Outil d'aide à la décision — supervision médicale requise.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 def _render_medicolegal() -> None:
@@ -1446,50 +1569,134 @@ def _render_medicolegal() -> None:
         unsafe_allow_html=True,
     )
 
-    with st.spinner("Chargement du module Médico-légal..."):
-        time.sleep(0.3)
+    col_form, col_help = st.columns([1.6, 1], gap="large")
 
-    st.markdown("#### Mesures crâniennes")
-    c1, c2, c3 = st.columns(3)
-    mcl  = c1.number_input("Longueur crânienne max (mm)", 0.0, 250.0, 180.0)
-    mcb  = c2.number_input("Largeur crânienne max (mm)", 0.0, 250.0, 140.0)
-    bzb  = c3.number_input("Diamètre bizygomatique (mm)", 0.0, 200.0, 128.0)
-    c4, c5, c6 = st.columns(3)
-    nh   = c4.number_input("Hauteur nasale (mm)", 0.0, 100.0, 52.0)
-    nb   = c5.number_input("Largeur nasale (mm)", 0.0, 80.0, 25.0)
-    bnl  = c6.number_input("Longueur basion-nasion (mm)", 0.0, 150.0, 98.0)
+    with col_form:
+        with st.expander("🦷 Mesures crâniennes", expanded=True):
+            c1, c2, c3 = st.columns(3)
+            mcl = c1.number_input("Longueur crânienne max (mm)", 0.0, 250.0, 180.0)
+            mcb = c2.number_input("Largeur crânienne max (mm)",  0.0, 250.0, 140.0)
+            bzb = c3.number_input("Diamètre bizygomatique (mm)", 0.0, 200.0, 128.0)
+            c4, c5, c6 = st.columns(3)
+            nh  = c4.number_input("Hauteur nasale (mm)",        0.0, 100.0, 52.0)
+            nb  = c5.number_input("Largeur nasale (mm)",        0.0,  80.0, 25.0)
+            bnl = c6.number_input("Longueur basion-nasion (mm)",0.0, 150.0, 98.0)
 
-    st.markdown("#### Mesures post-crâniennes")
-    c7, c8, c9, c10 = st.columns(4)
-    fem  = c7.number_input("Fémur (cm)", 0.0, 80.0, 45.0)
-    tib  = c8.number_input("Tibia (cm)", 0.0, 70.0, 37.0)
-    hum  = c9.number_input("Humérus (cm)", 0.0, 60.0, 32.0)
-    rad  = c10.number_input("Radius (cm)", 0.0, 50.0, 24.0)
+        with st.expander("🦴 Mesures post-crâniennes", expanded=True):
+            c7, c8, c9, c10 = st.columns(4)
+            fem = c7.number_input("Fémur (cm)",   0.0, 80.0, 45.0)
+            tib = c8.number_input("Tibia (cm)",   0.0, 70.0, 37.0)
+            hum = c9.number_input("Humérus (cm)", 0.0, 60.0, 32.0)
+            rad = c10.number_input("Radius (cm)", 0.0, 50.0, 24.0)
 
-    st.markdown("#### Marqueurs ancestraux (AIMs)")
-    c11, c12, c13 = st.columns(3)
-    pc1 = c11.number_input("AIM_PC1", -5.0, 5.0, 0.0, step=0.01)
-    pc2 = c12.number_input("AIM_PC2", -5.0, 5.0, 0.0, step=0.01)
-    pc3 = c13.number_input("AIM_PC3", -5.0, 5.0, 0.0, step=0.01)
+        with st.expander("🧬 Marqueurs ancestraux (AIMs)", expanded=False):
+            c11, c12, c13 = st.columns(3)
+            pc1 = c11.number_input("AIM_PC1", -5.0, 5.0, 0.0, step=0.01)
+            pc2 = c12.number_input("AIM_PC2", -5.0, 5.0, 0.0, step=0.01)
+            pc3 = c13.number_input("AIM_PC3", -5.0, 5.0, 0.0, step=0.01)
 
-    if st.button("🦴 Analyser le profil BioID", use_container_width=True):
-        with st.spinner("🧠 Estimation du profil biologique en cours..."):
-            time.sleep(0.6)
-            result = multibio_predict(bioid_data={
-                "cranial_measurements": {
-                    "max_cranial_length_mm": mcl, "max_cranial_breadth_mm": mcb,
-                    "bizygomatic_breadth_mm": bzb, "nasal_height_mm": nh,
-                    "nasal_breadth_mm": nb, "basion_nasion_length_mm": bnl,
-                },
-                "postcranial_measurements": {
-                    "femur_length_cm": fem, "tibia_length_cm": tib,
-                    "humerus_length_cm": hum, "radius_length_cm": rad,
-                },
-                "aims_pcs": {"AIM_PC1": pc1, "AIM_PC2": pc2, "AIM_PC3": pc3},
-            })
-        st.success("✅ Profil estimé")
-        with st.expander("Résultats JSON"):
-            st.json(result)
+        if st.button("🦴 Analyser le profil BioID", use_container_width=True):
+            with st.spinner("🧠 Estimation du profil biologique en cours — PCA + régressions..."):
+                time.sleep(0.6)
+                try:
+                    result = multibio_predict(bioid_data={
+                        "cranial_measurements": {
+                            "max_cranial_length_mm": mcl, "max_cranial_breadth_mm": mcb,
+                            "bizygomatic_breadth_mm": bzb, "nasal_height_mm": nh,
+                            "nasal_breadth_mm": nb, "basion_nasion_length_mm": bnl,
+                        },
+                        "postcranial_measurements": {
+                            "femur_length_cm": fem, "tibia_length_cm": tib,
+                            "humerus_length_cm": hum, "radius_length_cm": rad,
+                        },
+                        "aims_pcs": {"AIM_PC1": pc1, "AIM_PC2": pc2, "AIM_PC3": pc3},
+                    })
+                except Exception as e:
+                    st.error(f"Erreur lors de l'analyse : {e}")
+                    result = None
+
+            if result:
+                pred_data   = result.get("results", {}).get("module_3_forensic", {})
+                prediction  = pred_data.get("prediction", {})
+                confidence  = pred_data.get("confidence", {})
+                status      = pred_data.get("status", "scaffold_ready")
+
+                if status == "model_loaded" and prediction:
+                    bio_sex   = prediction.get("biological_sex")
+                    age_death = prediction.get("age_at_death")
+                    ancestry  = prediction.get("ancestry")
+                    stature   = prediction.get("stature_cm")
+                    conf_sex  = confidence.get("biological_sex") if confidence else None
+                    conf_anc  = confidence.get("ancestry") if confidence else None
+
+                    st.markdown(
+                        f"""<div class='section-card'>
+                        <div class='section-title'>🦴 Profil biologique estimé</div>
+                        <div style='display:grid;grid-template-columns:1fr 1fr;gap:1rem;'>
+                            <div style='background:#EBF4FD;border-radius:12px;padding:1rem;text-align:center;'>
+                                <div style='font-size:0.72rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;'>Sexe biologique</div>
+                                <div style='font-size:1.6rem;font-weight:800;color:#2E86DE;'>{"♂ Masculin" if bio_sex == "M" else "♀ Féminin" if bio_sex == "F" else bio_sex or "—"}</div>
+                                {f"<div style='font-size:0.78rem;color:#5E7A8A;'>Confiance : {conf_sex:.1%}</div>" if conf_sex else ""}
+                            </div>
+                            <div style='background:#EBF4FD;border-radius:12px;padding:1rem;text-align:center;'>
+                                <div style='font-size:0.72rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;'>Âge au décès</div>
+                                <div style='font-size:1.6rem;font-weight:800;color:#2E86DE;'>{f"{age_death:.0f} ans" if age_death else "—"}</div>
+                            </div>
+                            <div style='background:#F5EEF8;border-radius:12px;padding:1rem;text-align:center;'>
+                                <div style='font-size:0.72rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;'>Ascendance</div>
+                                <div style='font-size:1.3rem;font-weight:800;color:#8E44AD;'>{ancestry or "—"}</div>
+                                {f"<div style='font-size:0.78rem;color:#5E7A8A;'>Confiance : {conf_anc:.1%}</div>" if conf_anc else ""}
+                            </div>
+                            <div style='background:#EAF5EA;border-radius:12px;padding:1rem;text-align:center;'>
+                                <div style='font-size:0.72rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;'>Stature estimée</div>
+                                <div style='font-size:1.6rem;font-weight:800;color:#27AE60;'>{f"{stature:.1f} cm" if stature else "—"}</div>
+                            </div>
+                        </div></div>""",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.info("ℹ️ Modèle non encore entraîné — résultat placeholder. "
+                            "Lancer `python scripts/train_forensic_model.py`")
+
+                _download_report(pred_data, "medicolegal", "dl_bioid")
+                with st.expander("Réponse JSON complète"):
+                    st.json(result)
+
+    with col_help:
+        st.markdown(
+            """
+            <div class="section-card">
+                <div class="section-title">📐 Repères anthropométriques</div>
+                <table style="width:100%; font-size:0.82rem; border-collapse:collapse;">
+                    <tr style="border-bottom:1px solid #DDE8EE;">
+                        <td style="padding:0.4rem 0; color:#5E7A8A; font-weight:600;">Fémur moyen H</td>
+                        <td style="padding:0.4rem 0; color:#1A2B3C;">45–48 cm</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #DDE8EE;">
+                        <td style="padding:0.4rem 0; color:#5E7A8A; font-weight:600;">Fémur moyen F</td>
+                        <td style="padding:0.4rem 0; color:#1A2B3C;">41–44 cm</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #DDE8EE;">
+                        <td style="padding:0.4rem 0; color:#5E7A8A; font-weight:600;">Bizygomatique H</td>
+                        <td style="padding:0.4rem 0; color:#1A2B3C;">130–140 mm</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:0.4rem 0; color:#5E7A8A; font-weight:600;">Bizygomatique F</td>
+                        <td style="padding:0.4rem 0; color:#1A2B3C;">118–128 mm</td>
+                    </tr>
+                </table>
+                <div style="margin-top:0.8rem;font-size:0.78rem;color:#5E7A8A;line-height:1.6;">
+                    Méthodes : <strong>PCA craniométrique</strong>,
+                    régressions ostéométriques Trotter & Gleser
+                    adaptées aux populations africaines subsahariennes.
+                </div>
+            </div>
+            <div class='disclaimer' style='margin-top:0.8rem;'>
+                ⚠️ Usage médico-légal uniquement — supervision d'un anthropologue judiciaire requise.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 def _render_breast_cancer() -> None:
@@ -1503,29 +1710,116 @@ def _render_breast_cancer() -> None:
         unsafe_allow_html=True,
     )
 
-    with st.spinner("Chargement du module Cancer du sein..."):
-        time.sleep(0.3)
+    _BC_INFO = {
+        "Normal":    ("🟢", "#27AE60", "#E9F7EF", "Tissu mammaire normal",    "Poursuite du dépistage standard annuel."),
+        "Benign":    ("🟡", "#E67E22", "#FEF0E7", "Lésion bénigne détectée",  "Surveillance rapprochée recommandée — IRM ou biopsie à discuter."),
+        "Malignant": ("🔴", "#E74C3C", "#FDECEA", "Suspicion maligne",        "Avis oncologique urgent — biopsie confirmatoire requise."),
+    }
 
-    uploaded = st.file_uploader("Importer une mammographie (PNG, JPG)", type=["png", "jpg", "jpeg"], key="bc_upload")
+    col_info, col_upload = st.columns([1, 1.4], gap="large")
 
-    if uploaded:
-        col_img, col_res = st.columns(2)
-        with col_img:
+    with col_info:
+        st.markdown(
+            """
+            <div class="section-card">
+                <div class="section-title">🩺 Comment ça fonctionne</div>
+                <p style="color:#5E7A8A; line-height:1.7; font-size:0.92rem;">
+                    EfficientNet-B0 analyse la mammographie et classe le tissu en
+                    <strong>Normal</strong>, <strong>Bénin</strong> ou <strong>Malin</strong>.
+                    La carte Grad-CAM surligne les zones activatrices de la décision.
+                </p>
+                <div style="margin-top:0.8rem;">
+                    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;">
+                        <span style="background:#E9F7EF;color:#27AE60;padding:0.2rem 0.5rem;border-radius:8px;font-size:0.78rem;font-weight:700;">🟢 Normal</span>
+                        <span style="font-size:0.82rem;color:#5E7A8A;">Aucune anomalie détectée</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;">
+                        <span style="background:#FEF0E7;color:#E67E22;padding:0.2rem 0.5rem;border-radius:8px;font-size:0.78rem;font-weight:700;">🟡 Bénin</span>
+                        <span style="font-size:0.82rem;color:#5E7A8A;">Lésion non maligne</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:0.5rem;">
+                        <span style="background:#FDECEA;color:#E74C3C;padding:0.2rem 0.5rem;border-radius:8px;font-size:0.78rem;font-weight:700;">🔴 Malin</span>
+                        <span style="font-size:0.82rem;color:#5E7A8A;">Suspicion maligne</span>
+                    </div>
+                </div>
+            </div>
+            <div class='disclaimer' style='margin-top:0.8rem;'>
+                ⚠️ Outil de triage — ne remplace pas une biopsie ni un avis radiologique.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with col_upload:
+        st.markdown("<div class='section-card'><div class='section-title'>📤 Analyser une mammographie</div>", unsafe_allow_html=True)
+        uploaded = st.file_uploader("Importer une mammographie (PNG, JPG)", type=["png", "jpg", "jpeg"], key="bc_upload")
+
+        if uploaded:
             st.image(uploaded, caption=uploaded.name, use_container_width=True)
-        with col_res:
-            if st.button("🩺 Analyser la mammographie", use_container_width=True):
+
+            if st.button("🩺 Analyser la mammographie", use_container_width=True, key="btn_bc"):
                 with st.spinner("🧠 Classification EfficientNet-B0 en cours..."):
                     time.sleep(0.8)
-                    suffix = Path(uploaded.name).suffix or ".png"
-                    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                        tmp.write(uploaded.getbuffer())
-                        temp_path = tmp.name
-                    result = multibio_predict(breast_cancer_image_path=temp_path)
-                st.success("✅ Classification terminée")
-                with st.expander("Résultats JSON"):
-                    st.json(result)
-    else:
-        st.info("ℹ️ Importer une mammographie pour activer l'analyse. Le modèle fonctionne entièrement hors ligne sur CPU.")
+                    try:
+                        suffix = Path(uploaded.name).suffix or ".png"
+                        with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                            tmp.write(uploaded.getbuffer())
+                            temp_path = tmp.name
+                        result = multibio_predict(breast_cancer_image_path=temp_path)
+                    except Exception as e:
+                        st.error(f"Erreur lors de l'analyse : {e}")
+                        result = None
+
+                if result:
+                    pred_data  = result.get("results", {}).get("module_4_breast_cancer", {})
+                    prediction = pred_data.get("prediction")
+                    confidence = pred_data.get("confidence")
+                    expl       = pred_data.get("explainability", {})
+                    gradcam    = expl.get("heatmap_b64")
+
+                    if prediction and prediction in _BC_INFO:
+                        icon, color, bg, label, reco = _BC_INFO[prediction]
+                        st.markdown(
+                            f"""<div style='background:{bg};border-left:5px solid {color};
+                            border-radius:0 14px 14px 0;padding:1.2rem 1.4rem;margin:0.8rem 0;'>
+                            <div style='font-size:1.3rem;font-weight:800;color:{color};'>
+                                {icon} {label}
+                            </div>
+                            {"<div style='font-size:0.9rem;color:#5E7A8A;margin-top:0.3rem;'>Confiance : <b>" + f"{confidence:.1%}" + "</b></div>" if confidence else ""}
+                            <div style='font-size:0.88rem;margin-top:0.5rem;color:#1A2B3C;'>
+                                💡 <strong>À faire :</strong> {reco}
+                            </div></div>""",
+                            unsafe_allow_html=True,
+                        )
+
+                        if gradcam:
+                            st.markdown("**🔥 Carte Grad-CAM — zones d'activation**")
+                            st.markdown(
+                                f'<img src="data:image/png;base64,{gradcam}" '
+                                'style="width:100%;border-radius:12px;border:1px solid #DDE8EE;" '
+                                'alt="Grad-CAM heatmap"/>',
+                                unsafe_allow_html=True,
+                            )
+                    else:
+                        st.info("ℹ️ Modèle non encore entraîné — résultat placeholder. "
+                                "Lancer `python scripts/train_breast_cancer_model.py`")
+
+                    _download_report(pred_data, "breast_cancer", "dl_bc")
+                    with st.expander("Réponse JSON complète"):
+                        st.json(result)
+        else:
+            st.markdown(
+                """
+                <div style="border:2px dashed #DDE8EE; border-radius:14px; padding:2.5rem;
+                     text-align:center; color:#8AABB8;">
+                    <div style="font-size:2.5rem; margin-bottom:0.5rem;">🩺</div>
+                    <div style="font-size:0.92rem;">Importer une mammographie pour activer l'analyse</div>
+                    <div style="font-size:0.78rem; margin-top:0.3rem; opacity:0.7;">PNG · JPG · JPEG · Fonctionne hors ligne sur CPU</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        st.markdown("</div>", unsafe_allow_html=True)
 
 
 def page_maladies(sous_page: str) -> None:
@@ -1786,6 +2080,21 @@ def page_parametres() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# EXPORT PDF
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _download_report(result: dict, module: str, key: str) -> None:
+    """Bouton de téléchargement du rapport PDF (ou HTML en fallback)."""
+    try:
+        data, mime = build_pdf_report(result, module=module)
+        ext  = "pdf" if mime == "application/pdf" else "html"
+        label = f"⬇️ Télécharger le rapport ({ext.upper()})"
+        st.download_button(label, data, f"rapport_kanea_{module}.{ext}", mime, key=key)
+    except Exception:
+        pass
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # CTA
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1818,7 +2127,12 @@ def main() -> None:
     inject_science_background()
 
     if not _MODULES_OK:
-        st.error(f"Erreur de chargement des modules internes : {_MODULES_ERR}")
+        st.error(
+            f"⚠️ Erreur de chargement des modules internes : `{_MODULES_ERR}`  \n"
+            "Vérifiez que toutes les dépendances sont installées : "
+            "`pip install -r requirements.txt`"
+        )
+        st.stop()
 
     page, sous_page = render_sidebar()
 

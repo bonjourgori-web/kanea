@@ -23,18 +23,28 @@ def normalize_sex(sex: str | None) -> str | None:
     return sex
 
 
+def encode_sex(sex: str | None) -> int:
+    """Encode le sexe en entier : F=0, M=1 (convention du modèle entraîné)."""
+    if sex == "M":
+        return 1
+    return 0  # F par défaut
+
+
 def build_feature_payload(payload: dict[str, Any]) -> dict[str, Any]:
     weight_kg = payload.get("weight_kg")
     height_cm = payload.get("height_cm")
+    sex_raw   = normalize_sex(payload.get("sex"))
+
     features = {
-        "age_months": payload.get("age_months"),
-        "weight_kg": weight_kg,
-        "height_cm": height_cm,
-        "sex": normalize_sex(payload.get("sex")),
-        "muac_cm": payload.get("muac_cm"),
-        "waz": payload.get("waz"),
-        "haz": payload.get("haz"),
-        "whz": payload.get("whz"),
-        "bmi": compute_bmi(weight_kg, height_cm),
+        "age_months":  payload.get("age_months"),
+        "weight_kg":   weight_kg,
+        "height_cm":   height_cm,
+        "sex":         sex_raw,
+        "muac_cm":     payload.get("muac_cm"),
+        "waz":         payload.get("waz"),
+        "haz":         payload.get("haz"),
+        "whz":         payload.get("whz"),
+        "bmi":         compute_bmi(weight_kg, height_cm),
+        "sex_encoded": encode_sex(sex_raw),
     }
     return features
