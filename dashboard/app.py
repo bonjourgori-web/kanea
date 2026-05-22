@@ -159,20 +159,20 @@ def inject_styles() -> None:
 
         /* ── Cards en verre dépoli (frosted glass) ───────────────────────── */
         .section-card {
-            background: rgba(255,255,255,0.82) !important;
-            backdrop-filter: blur(12px) !important;
-            -webkit-backdrop-filter: blur(12px) !important;
-            border: 1px solid rgba(255,255,255,0.6) !important;
+            background: rgba(255,255,255,0.97) !important;
+            backdrop-filter: blur(6px) !important;
+            -webkit-backdrop-filter: blur(6px) !important;
+            border: 1px solid rgba(221,232,238,0.9) !important;
         }
         .kpi-card {
-            background: rgba(255,255,255,0.80) !important;
-            backdrop-filter: blur(10px) !important;
-            -webkit-backdrop-filter: blur(10px) !important;
-            border: 1px solid rgba(255,255,255,0.55) !important;
+            background: rgba(255,255,255,0.96) !important;
+            backdrop-filter: blur(6px) !important;
+            -webkit-backdrop-filter: blur(6px) !important;
+            border: 1px solid rgba(221,232,238,0.85) !important;
         }
-        /* Zone principale légèrement voilée */
+        /* Zone principale bien opaque pour lisibilité */
         .block-container {
-            background: rgba(247,249,252,0.35) !important;
+            background: rgba(247,249,252,0.88) !important;
             border-radius: 20px;
         }
 
@@ -614,8 +614,8 @@ def inject_science_background() -> None:
               to   {{ transform: scale(1.10) translateZ(0); }}
             }}
             @keyframes kaneaPulse {{
-              0%,100% {{ opacity: 0.93; }}
-              50%      {{ opacity: 1;    }}
+              0%,100% {{ opacity: 0.28; }}
+              50%      {{ opacity: 0.34; }}
             }}
             #kanea-science-bg {{
               position   : fixed;
@@ -632,9 +632,9 @@ def inject_science_background() -> None:
               top: 0; left: 0; width: 100%; height: 100%;
               background: linear-gradient(
                 135deg,
-                rgba(240,255,254,0.28) 0%,
-                rgba(255,255,255,0.08) 45%,
-                rgba(20,0,50,0.18)  100%
+                rgba(247,249,252,0.78) 0%,
+                rgba(247,249,252,0.72) 50%,
+                rgba(247,249,252,0.68) 100%
               );
               z-index: -9;
               pointer-events: none;
@@ -746,7 +746,7 @@ def inject_molecule_background() -> None:
               va:    (Math.random() - 0.5) * 0.014,
               scale: sc,
               t:     tmpl,
-              alpha: 0.22 + sc * 0.28
+              alpha: 0.05 + sc * 0.07
             });
           }
 
@@ -756,7 +756,7 @@ def inject_molecule_background() -> None:
             bokeh.push({
               x: Math.random() * W, y: Math.random() * H,
               r:  28 + Math.random() * 55,
-              op: 0.04 + Math.random() * 0.09,
+              op: 0.012 + Math.random() * 0.022,
               vx: (Math.random() - 0.5) * 0.22,
               vy: -(0.07 + Math.random() * 0.18),
               col: Math.random() > 0.5 ? [0,200,255] : [140,0,255]
