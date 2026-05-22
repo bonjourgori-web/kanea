@@ -1173,7 +1173,12 @@ def page_dashboard(health_df: pd.DataFrame, climate_df: pd.DataFrame) -> None:
     )
 
     # ── Météo temps réel (Open-Meteo — même source que MSN Météo) ─────────────
-    climate_rt = get_climate(lat, lon)
+    climate_rt  = None
+    _meteo_err  = None
+    try:
+        climate_rt = get_climate(lat, lon)
+    except Exception as _e:
+        _meteo_err = str(_e)
 
     temp_val  = f"{climate_rt['temperature']:.0f}°C"   if climate_rt else "—"
     pluie_val = f"{climate_rt['rainfall']:.1f} mm"      if climate_rt else "—"
@@ -1212,6 +1217,10 @@ def page_dashboard(health_df: pd.DataFrame, climate_df: pd.DataFrame) -> None:
     for col, icon, label, value, sub, color in kpis:
         with col:
             st.markdown(_kpi_card(icon, label, value, sub, color), unsafe_allow_html=True)
+
+    if _meteo_err:
+        with st.expander("⚠️ Météo indisponible — détail de l'erreur"):
+            st.code(_meteo_err)
 
     # ── Prévisions 7 jours ────────────────────────────────────────────────────
     if climate_rt and climate_rt.get("forecast"):

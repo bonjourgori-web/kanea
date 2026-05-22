@@ -310,60 +310,85 @@ _WMO_CONDITIONS = {
     95: "Orage", 96: "Orage avec grêle", 99: "Orage violent",
 }
 
+_API_PARAMS = {
+    "current": (
+        "temperature_2m,apparent_temperature,relative_humidity_2m,"
+        "precipitation,wind_speed_10m,surface_pressure,weather_code"
+    ),
+    "daily": (
+        "temperature_2m_max,temperature_2m_min,"
+        "precipitation_sum,precipitation_probability_max,weather_code"
+    ),
+    "timezone":      "auto",
+    "forecast_days": 7,
+}
+
+
 @st.cache_data(ttl=300)
-def get_climate(lat: float, lon: float) -> dict | None:
+def get_climate(lat: float, lon: float) -> dict:
     """
-    Récupère météo complète en temps réel via Open-Meteo (source identique à MSN/météo).
-    Retourne conditions actuelles + prévisions 7 jours.
+    Récupère météo complète via Open-Meteo.
+    Lève RuntimeError si l'API est indisponible (pas de mise en cache d'un échec).
     """
+    import json as _json
+    import urllib.parse
+    import urllib.request
+
+    params = {**_API_PARAMS, "latitude": lat, "longitude": lon}
+
+    data = None
+    req_error: str | None = None
+
+    # Tentative 1 : requests
     try:
         resp = requests.get(
             "https://api.open-meteo.com/v1/forecast",
-            params={
-                "latitude":  lat,
-                "longitude": lon,
-                "current": (
-                    "temperature_2m,apparent_temperature,relative_humidity_2m,"
-                    "precipitation,wind_speed_10m,surface_pressure,weather_code"
-                ),
-                "daily": (
-                    "temperature_2m_max,temperature_2m_min,"
-                    "precipitation_sum,precipitation_probability_max,weather_code"
-                ),
-                "timezone":      "auto",
-                "forecast_days": 7,
-            },
-            timeout=8,
+            params=params,
+            timeout=15,
         )
         resp.raise_for_status()
         data = resp.json()
-        cur  = data["current"]
-        day  = data["daily"]
+    except Exception as e:
+        req_error = str(e)
 
-        code = cur.get("weather_code", 0)
-        forecast = []
-        for i in range(len(day["time"])):
-            forecast.append({
-                "date":      day["time"][i],
-                "t_max":     day["temperature_2m_max"][i],
-                "t_min":     day["temperature_2m_min"][i],
-                "pluie":     day["precipitation_sum"][i],
-                "prob_pluie":day["precipitation_probability_max"][i],
-                "condition": _WMO_CONDITIONS.get(day["weather_code"][i], "—"),
-            })
+    # Tentative 2 : urllib (bibliothèque standard — toujours disponible)
+    if data is None:
+        try:
+            url = "https://api.open-meteo.com/v1/forecast?" + urllib.parse.urlencode(
+                {k: str(v) for k, v in params.items()}
+            )
+            with urllib.request.urlopen(url, timeout=15) as r:
+                data = _json.loads(r.read().decode())
+        except Exception as e2:
+            raise RuntimeError(
+                f"Open-Meteo indisponible — requests: {req_error} | urllib: {e2}"
+            ) from e2
 
-        return {
-            "temperature":  cur["temperature_2m"],
-            "ressenti":     cur["apparent_temperature"],
-            "humidity":     cur["relative_humidity_2m"],
-            "rainfall":     cur["precipitation"],
-            "wind":         cur["wind_speed_10m"],
-            "pressure":     cur["surface_pressure"],
-            "condition":    _WMO_CONDITIONS.get(code, "—"),
-            "forecast":     forecast,
-        }
-    except Exception:
-        return None
+    cur  = data["current"]
+    day  = data["daily"]
+    code = cur.get("weather_code", 0)
+
+    forecast = []
+    for i in range(len(day["time"])):
+        forecast.append({
+            "date":      day["time"][i],
+            "t_max":     day["temperature_2m_max"][i],
+            "t_min":     day["temperature_2m_min"][i],
+            "pluie":     day["precipitation_sum"][i],
+            "prob_pluie":day["precipitation_probability_max"][i],
+            "condition": _WMO_CONDITIONS.get(day["weather_code"][i], "—"),
+        })
+
+    return {
+        "temperature":  cur["temperature_2m"],
+        "ressenti":     cur["apparent_temperature"],
+        "humidity":     cur["relative_humidity_2m"],
+        "rainfall":     cur["precipitation"],
+        "wind":         cur["wind_speed_10m"],
+        "pressure":     cur["surface_pressure"],
+        "condition":    _WMO_CONDITIONS.get(code, "—"),
+        "forecast":     forecast,
+    }
 
 
 @st.cache_resource
@@ -566,8 +591,13 @@ def render_climate_tab(health_df: pd.DataFrame) -> None:
     if fetch:
         get_climate.clear()
 
-    city_meta = CIV_CITIES[selected_city]
-    climate_rt = get_climate(city_meta["lat"], city_meta["lon"])
+    city_meta  = CIV_CITIES[selected_city]
+    climate_rt = None
+    _rt_error  = None
+    try:
+        climate_rt = get_climate(city_meta["lat"], city_meta["lon"])
+    except Exception as _e:
+        _rt_error = str(_e)
 
     if climate_rt:
         risk  = predict_risk(climate_rt)
@@ -593,10 +623,10 @@ def render_climate_tab(health_df: pd.DataFrame) -> None:
                 f"✅ Risque sous contrôle à **{selected_city}** (score : {risk:.0%})"
             )
     else:
-        st.warning(
-            "⚠️ Données en temps réel indisponibles. "
-            "Vérifiez la connexion ou réessayez dans quelques secondes."
-        )
+        st.warning("⚠️ Données en temps réel indisponibles. Réessayez dans quelques secondes.")
+        if _rt_error:
+            with st.expander("Détail de l'erreur"):
+                st.code(_rt_error)
 
     st.caption(
         "📌 Sources : PNLP CIV · OMS · NASA POWER · CHIRPS · SODEXAM · Open-Meteo. "
