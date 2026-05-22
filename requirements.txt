@@ -13,14 +13,15 @@ pillow>=10.0.0
 plotly>=5.18.0
 folium>=0.16.0
 
-# ── Machine Learning (prédictions Nutrition + BioID) ───────────────────────────
+# ── Machine Learning (prédictions Nutrition + BioID) ────────────────────────────
 scikit-learn>=1.3.0
 xgboost>=2.0.0
 
-# ── Deep Learning CPU (prédictions Malaria + Cancer du sein) ───────────────────
-torch>=2.0.0
-torchvision>=0.15.0
-
-# ── Utilitaires ─────────────────────────────────────────────────────────────────
+# ── Utilitaires ──────────────────────────────────────────────────────────────────
 requests>=2.31.0
 tqdm>=4.66.0
+
+# ── Deep Learning (optionnel — installé séparément si modèles disponibles) ───────
+# torch et torchvision sont importés de façon paresseuse dans les predictors.
+# Ne pas ajouter ici : trop lourd (~700 MB) pour Streamlit Cloud free tier.
+# Pour activer localement : pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
