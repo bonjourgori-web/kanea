@@ -4,9 +4,7 @@ Couvre tous les endpoints REST avec le TestClient de FastAPI (pas de serveur req
 from __future__ import annotations
 
 import io
-from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 
 from api.main import app
@@ -88,18 +86,21 @@ def test_predict_biometry_model_loaded_has_prediction() -> None:
 
 _BIOID_PAYLOAD = {
     "cranial_measurements": {
-        "max_cranial_length_mm": 183.0,
-        "max_cranial_breadth_mm": 143.0,
-        "bizygomatic_breadth_mm": 133.0,
-        "nasal_height_mm": 53.0,
-        "nasal_breadth_mm": 27.0,
-        "basion_nasion_length_mm": 99.0,
+        "GOL": 183.0, "XCB": 143.0, "BBH": 135.0,
+        "ZYB": 133.0, "AUB": 122.0, "ASB": 108.0,
+        "BNL": 99.0,  "BPL": 98.0,  "NLH": 53.0,
+        "NLB": 27.0,  "OBH": 35.0,  "OBB": 43.0,
+        "MAB": 65.0,  "FOL": 37.0,  "FOB": 31.0,
     },
     "postcranial_measurements": {
-        "femur_length_cm": 46.5,
-        "tibia_length_cm": 38.5,
-        "humerus_length_cm": 33.0,
-        "radius_length_cm": 25.0,
+        "femur_max_length":   452.0,
+        "femur_bicondylar":   449.0,
+        "tibia_length":       372.0,
+        "humerus_max_length": 327.0,
+        "radius_max_length":  247.0,
+        "fibula_max_length":  367.0,
+        "femur_head_diam":     47.5,
+        "humerus_head_diam":   46.0,
     },
     "aims_pcs": {"AIM_PC1": 1.2, "AIM_PC2": 0.4, "AIM_PC3": 0.3},
 }

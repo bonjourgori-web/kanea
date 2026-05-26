@@ -1573,28 +1573,45 @@ def _render_medicolegal() -> None:
     col_form, col_help = st.columns([1.6, 1], gap="large")
 
     with col_form:
-        with st.expander("🦷 Mesures crâniennes", expanded=True):
-            c1, c2, c3 = st.columns(3)
-            mcl = c1.number_input("Longueur crânienne max (mm)", 0.0, 250.0, 180.0)
-            mcb = c2.number_input("Largeur crânienne max (mm)",  0.0, 250.0, 140.0)
-            bzb = c3.number_input("Diamètre bizygomatique (mm)", 0.0, 200.0, 128.0)
-            c4, c5, c6 = st.columns(3)
-            nh  = c4.number_input("Hauteur nasale (mm)",        0.0, 100.0, 52.0)
-            nb  = c5.number_input("Largeur nasale (mm)",        0.0,  80.0, 25.0)
-            bnl = c6.number_input("Longueur basion-nasion (mm)",0.0, 150.0, 98.0)
+        with st.expander("💀 Mesures crâniennes — 15 variables FORDISC", expanded=True):
+            r1c1, r1c2, r1c3 = st.columns(3)
+            GOL = r1c1.number_input("GOL — Glabello-occipital (mm)", 0.0, 230.0, 180.0)
+            XCB = r1c2.number_input("XCB — Largeur crânienne max (mm)", 0.0, 185.0, 143.0)
+            BBH = r1c3.number_input("BBH — Basion-bregma (mm)", 0.0, 165.0, 133.0)
+            r2c1, r2c2, r2c3 = st.columns(3)
+            ZYB = r2c1.number_input("ZYB — Bizygomatique (mm)", 0.0, 165.0, 130.0)
+            AUB = r2c2.number_input("AUB — Biauriculaire (mm)", 0.0, 155.0, 121.0)
+            ASB = r2c3.number_input("ASB — Biastérionique (mm)", 0.0, 145.0, 107.0)
+            r3c1, r3c2, r3c3 = st.columns(3)
+            BNL = r3c1.number_input("BNL — Basion-nasion (mm)", 0.0, 125.0, 98.0)
+            BPL = r3c2.number_input("BPL — Basion-prosthion (mm)", 0.0, 125.0, 97.0)
+            NLH = r3c3.number_input("NLH — Hauteur nasale (mm)", 0.0, 75.0, 52.0)
+            r4c1, r4c2, r4c3 = st.columns(3)
+            NLB = r4c1.number_input("NLB — Largeur nasale (mm)", 0.0, 45.0, 25.0)
+            OBH = r4c2.number_input("OBH — Hauteur orbitaire (mm)", 0.0, 55.0, 34.0)
+            OBB = r4c3.number_input("OBB — Largeur orbitaire (mm)", 0.0, 62.0, 42.0)
+            r5c1, r5c2, r5c3 = st.columns(3)
+            MAB = r5c1.number_input("MAB — Largeur palatine (mm)", 0.0, 95.0, 64.0)
+            FOL = r5c2.number_input("FOL — Foramen magnum long. (mm)", 0.0, 55.0, 36.0)
+            FOB = r5c3.number_input("FOB — Foramen magnum larg. (mm)", 0.0, 48.0, 30.0)
 
-        with st.expander("🦴 Mesures post-crâniennes", expanded=True):
-            c7, c8, c9, c10 = st.columns(4)
-            fem = c7.number_input("Fémur (cm)",   0.0, 80.0, 45.0)
-            tib = c8.number_input("Tibia (cm)",   0.0, 70.0, 37.0)
-            hum = c9.number_input("Humérus (cm)", 0.0, 60.0, 32.0)
-            rad = c10.number_input("Radius (cm)", 0.0, 50.0, 24.0)
+        with st.expander("🦴 Mesures post-crâniennes — 8 variables (mm)", expanded=True):
+            p1, p2, p3, p4 = st.columns(4)
+            fem_max = p1.number_input("Fémur max (mm)",        0.0, 600.0, 450.0)
+            fem_bic = p2.number_input("Fémur bicondylaire (mm)", 0.0, 595.0, 447.0)
+            tib     = p3.number_input("Tibia (mm)",            0.0, 500.0, 370.0)
+            hum_max = p4.number_input("Humérus max (mm)",      0.0, 450.0, 325.0)
+            p5, p6, p7, p8 = st.columns(4)
+            rad_max = p5.number_input("Radius max (mm)",       0.0, 350.0, 245.0)
+            fib_max = p6.number_input("Fibula max (mm)",       0.0, 490.0, 365.0)
+            fem_hd  = p7.number_input("Tête fémur Ø (mm)",     0.0,  70.0,  47.0)
+            hum_hd  = p8.number_input("Tête humérus Ø (mm)",   0.0,  65.0,  46.0)
 
         with st.expander("🧬 Marqueurs ancestraux (AIMs)", expanded=False):
-            c11, c12, c13 = st.columns(3)
-            pc1 = c11.number_input("AIM_PC1", -5.0, 5.0, 0.0, step=0.01)
-            pc2 = c12.number_input("AIM_PC2", -5.0, 5.0, 0.0, step=0.01)
-            pc3 = c13.number_input("AIM_PC3", -5.0, 5.0, 0.0, step=0.01)
+            ac1, ac2, ac3 = st.columns(3)
+            pc1 = ac1.number_input("AIM_PC1", -5.0, 5.0, 0.0, step=0.01)
+            pc2 = ac2.number_input("AIM_PC2", -5.0, 5.0, 0.0, step=0.01)
+            pc3 = ac3.number_input("AIM_PC3", -5.0, 5.0, 0.0, step=0.01)
 
         if st.button("🦴 Analyser le profil BioID", use_container_width=True):
             with st.spinner("🧠 Estimation du profil biologique en cours — PCA + régressions..."):
@@ -1602,13 +1619,21 @@ def _render_medicolegal() -> None:
                 try:
                     result = multibio_predict(bioid_data={
                         "cranial_measurements": {
-                            "max_cranial_length_mm": mcl, "max_cranial_breadth_mm": mcb,
-                            "bizygomatic_breadth_mm": bzb, "nasal_height_mm": nh,
-                            "nasal_breadth_mm": nb, "basion_nasion_length_mm": bnl,
+                            "GOL": GOL, "XCB": XCB, "BBH": BBH,
+                            "ZYB": ZYB, "AUB": AUB, "ASB": ASB,
+                            "BNL": BNL, "BPL": BPL, "NLH": NLH,
+                            "NLB": NLB, "OBH": OBH, "OBB": OBB,
+                            "MAB": MAB, "FOL": FOL, "FOB": FOB,
                         },
                         "postcranial_measurements": {
-                            "femur_length_cm": fem, "tibia_length_cm": tib,
-                            "humerus_length_cm": hum, "radius_length_cm": rad,
+                            "femur_max_length":   fem_max,
+                            "femur_bicondylar":   fem_bic,
+                            "tibia_length":       tib,
+                            "humerus_max_length": hum_max,
+                            "radius_max_length":  rad_max,
+                            "fibula_max_length":  fib_max,
+                            "femur_head_diam":    fem_hd,
+                            "humerus_head_diam":  hum_hd,
                         },
                         "aims_pcs": {"AIM_PC1": pc1, "AIM_PC2": pc2, "AIM_PC3": pc3},
                     })
@@ -1667,29 +1692,57 @@ def _render_medicolegal() -> None:
         st.markdown(
             """
             <div class="section-card">
-                <div class="section-title">📐 Repères anthropométriques</div>
-                <table style="width:100%; font-size:0.82rem; border-collapse:collapse;">
-                    <tr style="border-bottom:1px solid #DDE8EE;">
-                        <td style="padding:0.4rem 0; color:#5E7A8A; font-weight:600;">Fémur moyen H</td>
-                        <td style="padding:0.4rem 0; color:#1A2B3C;">45–48 cm</td>
-                    </tr>
-                    <tr style="border-bottom:1px solid #DDE8EE;">
-                        <td style="padding:0.4rem 0; color:#5E7A8A; font-weight:600;">Fémur moyen F</td>
-                        <td style="padding:0.4rem 0; color:#1A2B3C;">41–44 cm</td>
-                    </tr>
-                    <tr style="border-bottom:1px solid #DDE8EE;">
-                        <td style="padding:0.4rem 0; color:#5E7A8A; font-weight:600;">Bizygomatique H</td>
-                        <td style="padding:0.4rem 0; color:#1A2B3C;">130–140 mm</td>
-                    </tr>
-                    <tr>
-                        <td style="padding:0.4rem 0; color:#5E7A8A; font-weight:600;">Bizygomatique F</td>
-                        <td style="padding:0.4rem 0; color:#1A2B3C;">118–128 mm</td>
-                    </tr>
+                <div class="section-title">📐 Repères FORDISC — valeurs typiques</div>
+                <table style="width:100%;font-size:0.78rem;border-collapse:collapse;">
+                    <thead>
+                        <tr style="background:#EBF5FB;">
+                            <th style="padding:0.35rem 0.4rem;color:#5E7A8A;text-align:left;">Mesure</th>
+                            <th style="padding:0.35rem 0.4rem;color:#2E86DE;text-align:center;">♂ H</th>
+                            <th style="padding:0.35rem 0.4rem;color:#E74C3C;text-align:center;">♀ F</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-bottom:1px solid #EEF2F6;">
+                            <td style="padding:0.3rem 0.4rem;color:#5E7A8A;font-weight:600;">GOL (mm)</td>
+                            <td style="padding:0.3rem 0.4rem;text-align:center;">178–192</td>
+                            <td style="padding:0.3rem 0.4rem;text-align:center;">170–184</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid #EEF2F6;">
+                            <td style="padding:0.3rem 0.4rem;color:#5E7A8A;font-weight:600;">XCB (mm)</td>
+                            <td style="padding:0.3rem 0.4rem;text-align:center;">138–148</td>
+                            <td style="padding:0.3rem 0.4rem;text-align:center;">132–142</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid #EEF2F6;">
+                            <td style="padding:0.3rem 0.4rem;color:#5E7A8A;font-weight:600;">ZYB (mm)</td>
+                            <td style="padding:0.3rem 0.4rem;text-align:center;">126–140</td>
+                            <td style="padding:0.3rem 0.4rem;text-align:center;">116–128</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid #EEF2F6;">
+                            <td style="padding:0.3rem 0.4rem;color:#5E7A8A;font-weight:600;">NLH (mm)</td>
+                            <td style="padding:0.3rem 0.4rem;text-align:center;">50–57</td>
+                            <td style="padding:0.3rem 0.4rem;text-align:center;">46–53</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid #EEF2F6;">
+                            <td style="padding:0.3rem 0.4rem;color:#5E7A8A;font-weight:600;">Fémur max (mm)</td>
+                            <td style="padding:0.3rem 0.4rem;text-align:center;">430–490</td>
+                            <td style="padding:0.3rem 0.4rem;text-align:center;">390–450</td>
+                        </tr>
+                        <tr style="border-bottom:1px solid #EEF2F6;">
+                            <td style="padding:0.3rem 0.4rem;color:#5E7A8A;font-weight:600;">Tibia (mm)</td>
+                            <td style="padding:0.3rem 0.4rem;text-align:center;">345–400</td>
+                            <td style="padding:0.3rem 0.4rem;text-align:center;">310–365</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:0.3rem 0.4rem;color:#5E7A8A;font-weight:600;">Tête fémur Ø (mm)</td>
+                            <td style="padding:0.3rem 0.4rem;text-align:center;">44–52</td>
+                            <td style="padding:0.3rem 0.4rem;text-align:center;">38–46</td>
+                        </tr>
+                    </tbody>
                 </table>
-                <div style="margin-top:0.8rem;font-size:0.78rem;color:#5E7A8A;line-height:1.6;">
-                    Méthodes : <strong>PCA craniométrique</strong>,
-                    régressions ostéométriques Trotter & Gleser
-                    adaptées aux populations africaines subsahariennes.
+                <div style="margin-top:0.8rem;font-size:0.75rem;color:#5E7A8A;line-height:1.5;">
+                    Standard : <strong>FORDISC 3.0</strong> (Jantz &amp; Ousley)<br>
+                    Méthodes : PCA craniométrique · Régressions ostéométriques<br>
+                    Populations : africaines subsahariennes (base Howells)
                 </div>
             </div>
             <div class='disclaimer' style='margin-top:0.8rem;'>
