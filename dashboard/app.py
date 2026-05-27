@@ -1398,6 +1398,14 @@ def _render_paludisme() -> None:
         _iname = st.session_state.get("malaria_image_name", "")
         _pred_norm = (_pred or "").lower()
 
+        # Afficher l'erreur si l'inférence a échoué
+        _mal_result = st.session_state.get("malaria_result", {})
+        if _pred is None and _mal_result.get("status") == "inference_error":
+            st.error(
+                f"❌ Erreur d'analyse — {_mal_result.get('error', 'modèle ONNX non disponible')}",
+                icon="🔬",
+            )
+
         if _pred is not None:
             if "parasit" in _pred_norm:
                 st.markdown(
