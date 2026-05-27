@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+import sys
+import logging
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+
+# ── Racine KANEA dans le path ─────────────────────────────────────────────────
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+log = logging.getLogger("kanea.api")
 
 from api.schemas import BioIDInput, BreastCancerPathInput, MalariaPathInput, MultibioRequest, NutritionInput
 from modules.bioid_ml.predictor import predict_bioid
@@ -12,57 +22,87 @@ from modules.malaria_dl.predictor import predict_malaria
 from modules.integration.engine import multibio_predict
 from modules.nutrition_ml.predictor import predict_nutrition
 
+# ── Import optionnel du service bioid_ai enrichi ──────────────────────────────
+try:
+    from bioid_ai.api.services.bioid_service import (
+        predict_full as _bioid_predict_full,
+        generate_pdf_report as _bioid_generate_pdf,
+        load_bundle as _bioid_load_bundle,
+    )
+    _BIOID_AI_OK = True
+    _bioid_load_bundle()
+    log.info("bioid_ai service chargé — bundle bioid_bundle.pkl actif")
+except Exception as _e:
+    _BIOID_AI_OK = False
+    log.warning("bioid_ai service indisponible : %s", _e)
+
+# ── Import optionnel du router bioid_ai ──────────────────────────────────────
+try:
+    from bioid_ai.api.routes.bioid import router as _bioid_router
+    _BIOID_ROUTER_OK = True
+except Exception:
+    _BIOID_ROUTER_OK = False
+
 app = FastAPI(
-    title="KANEA API",
-    description="API d'aide a la decision biomedicale et medico-legale pour KANEA.",
-    version="0.1.0",
+    title="KANÉA API",
+    description=(
+        "API d'aide à la décision biomédicale et médico-légale — "
+        "Knowledge Anthropology & Neural Engine for Africa"
+    ),
+    version="2.0.0",
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Monte le router BioID AI avancé sous /api/v2/bioid
+if _BIOID_ROUTER_OK:
+    app.include_router(_bioid_router, prefix="/api/v2", tags=["BioID AI v2"])
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RACINE & SANTÉ
+# ═══════════════════════════════════════════════════════════════════════════════
 
 @app.get("/")
-def root() -> dict[str, str]:
+def root() -> dict:
     return {
-        "application": "KANEA",
-        "status": "running",
-        "message": "Knowledge Anthropology & Neural Engine for Africa",
+        "application":  "KANÉA",
+        "version":      "2.0.0",
+        "status":       "running",
+        "message":      "Knowledge Anthropology & Neural Engine for Africa",
+        "bioid_ai_v2":  _BIOID_AI_OK,
     }
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict:
+    return {"status": "ok", "bioid_bundle": _BIOID_AI_OK}
 
 
 @app.get("/info")
 def info() -> dict:
     return {
-        "application": "KANEA",
-        "full_name": "Knowledge Anthropology & Neural Engine for Africa",
+        "application": "KANÉA",
+        "full_name":   "Knowledge Anthropology & Neural Engine for Africa",
         "modules": [
-            {
-                "name": "module_1_malaria",
-                "approach": "deep_learning",
-                "technology": "fast.ai + PyTorch + ResNet34",
-            },
-            {
-                "name": "module_2_biometry",
-                "approach": "machine_learning",
-                "technology": "RandomForest + XGBoost",
-            },
-            {
-                "name": "module_3_forensic",
-                "approach": "machine_learning",
-                "technology": "scikit-learn + PCA + regressions",
-            },
-            {
-                "name": "module_4_breast_cancer",
-                "approach": "deep_learning",
-                "technology": "PyTorch + EfficientNet / ResNet",
-            },
+            {"name": "module_1_malaria",      "approach": "deep_learning",    "technology": "fast.ai + PyTorch + ResNet34"},
+            {"name": "module_2_biometry",     "approach": "machine_learning", "technology": "RandomForest + XGBoost"},
+            {"name": "module_3_forensic",     "approach": "machine_learning", "technology": "BioID AI v2 — VotingClassifier + PCA + Trotter-Gleser"},
+            {"name": "module_4_breast_cancer","approach": "deep_learning",    "technology": "PyTorch + EfficientNet-B0"},
         ],
         "integration": "multibio_predict",
+        "bioid_ai_v2_routes": "/api/v2/bioid/" if _BIOID_ROUTER_OK else None,
     }
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MODULE 1 — MALARIA
+# ═══════════════════════════════════════════════════════════════════════════════
 
 @app.post("/predict/malaria")
 def predict_malaria_from_path(request: MalariaPathInput) -> dict:
@@ -78,6 +118,10 @@ async def predict_malaria_from_upload(file: UploadFile = File(...)) -> dict:
     return predict_malaria(temp_path)
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# MODULE 4 — BREAST CANCER
+# ═══════════════════════════════════════════════════════════════════════════════
+
 @app.post("/predict/breast-cancer")
 def predict_breast_cancer_from_path(request: BreastCancerPathInput) -> dict:
     return predict_breast_cancer(request.image_path)
@@ -92,22 +136,120 @@ async def predict_breast_cancer_from_upload(file: UploadFile = File(...)) -> dic
     return predict_breast_cancer(temp_path)
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# MODULE 2 — BIOMETRY / NUTRITION
+# ═══════════════════════════════════════════════════════════════════════════════
+
 @app.post("/predict/biometry")
 def predict_biometry(request: NutritionInput) -> dict:
     return predict_nutrition(request.model_dump())
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# MODULE 3 — FORENSIC / BIOID
+# ═══════════════════════════════════════════════════════════════════════════════
+
 @app.post("/predict/forensic")
 def predict_forensic(request: BioIDInput) -> dict:
-    return predict_bioid(request.model_dump())
+    """
+    Estimation du profil biologique médico-légal.
 
+    Utilise automatiquement BioID AI v2 si disponible,
+    sinon fallback vers le modèle forensic classique.
+    """
+    payload = {
+        "cranial_measurements":     request.cranial_measurements,
+        "postcranial_measurements": request.postcranial_measurements,
+        "aims_pcs":                 request.aims_pcs,
+    }
+
+    # Voie enrichie bioid_ai v2
+    if _BIOID_AI_OK and request.aims_raw is not None:
+        try:
+            cranial     = request.cranial_measurements
+            postcranial = request.postcranial_measurements
+            aims_raw    = request.aims_raw
+
+            result = _bioid_predict_full(
+                cranial=cranial,
+                postcranial=postcranial,
+                aims_raw=aims_raw,
+            )
+
+            pdf_path = None
+            if request.generate_pdf and result.get("status") == "success":
+                case_id  = request.case_id  or "KANEA-AUTO"
+                examiner = request.examiner or "KANÉA System"
+                try:
+                    pdf_path = _bioid_generate_pdf(case_id, examiner, result)
+                except Exception as pdf_err:
+                    log.warning("PDF non généré : %s", pdf_err)
+
+            return {
+                "module":    "module_3_forensic",
+                "engine":    "bioid_ai_v2",
+                "result":    result,
+                "pdf_path":  pdf_path,
+                "status":    result.get("status", "ok"),
+            }
+        except Exception as exc:
+            log.error("bioid_ai v2 error : %s", exc)
+
+    # Voie classique (fallback)
+    result = predict_bioid(payload)
+
+    # Génération PDF si demandée et modèle chargé
+    pdf_path = None
+    if request.generate_pdf and result.get("status") == "model_loaded" and _BIOID_AI_OK:
+        try:
+            case_id  = request.case_id  or "KANEA-AUTO"
+            examiner = request.examiner or "KANÉA System"
+            preds = {
+                "biological_sex":     result["prediction"].get("biological_sex"),
+                "sex_confidence":     (result.get("confidence") or {}).get("biological_sex"),
+                "age_at_death":       result["prediction"].get("age_at_death"),
+                "ancestry":           result["prediction"].get("ancestry"),
+                "ancestry_confidence":(result.get("confidence") or {}).get("ancestry"),
+                "stature_cm":         result["prediction"].get("stature_cm"),
+                "status":             "success",
+            }
+            pdf_path = _bioid_generate_pdf(case_id, examiner, preds)
+        except Exception as pdf_err:
+            log.warning("PDF non généré : %s", pdf_err)
+
+    result["pdf_path"] = pdf_path
+    return result
+
+
+@app.post("/predict/forensic/report")
+def generate_forensic_report(request: BioIDInput) -> dict:
+    """Génère uniquement le rapport PDF pour un dossier BioID."""
+    if not _BIOID_AI_OK:
+        raise HTTPException(status_code=503, detail="bioid_ai non disponible — installez les dépendances")
+
+    case_id  = request.case_id  or "KANEA-AUTO"
+    examiner = request.examiner or "KANÉA System"
+
+    cranial     = request.cranial_measurements
+    postcranial = request.postcranial_measurements
+    aims_raw    = request.aims_raw
+
+    try:
+        predictions = _bioid_predict_full(cranial=cranial, postcranial=postcranial, aims_raw=aims_raw)
+        pdf_path    = _bioid_generate_pdf(case_id, examiner, predictions)
+        return {"case_id": case_id, "pdf_path": pdf_path, "status": "ok"}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erreur génération rapport : {exc}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MULTIMODAL
+# ═══════════════════════════════════════════════════════════════════════════════
 
 @app.post("/predict")
 def predict(request: MultibioRequest) -> dict:
-    nutrition_data = (
-        request.nutrition_data.model_dump() if request.nutrition_data else None
-    )
-    bioid_data = request.bioid_data.model_dump() if request.bioid_data else None
+    nutrition_data = request.nutrition_data.model_dump() if request.nutrition_data else None
+    bioid_data     = request.bioid_data.model_dump()     if request.bioid_data     else None
 
     return multibio_predict(
         image_path=request.image_path,

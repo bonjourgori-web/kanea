@@ -1560,19 +1560,66 @@ def _render_nutrition() -> None:
 
 
 def _render_medicolegal() -> None:
+    # ── Import optionnel du service bioid_ai ──────────────────────────────────
+    try:
+        from bioid_ai.api.services.bioid_service import (
+            predict_full as _bioid_full,
+            generate_pdf_report as _bioid_pdf,
+            load_bundle as _bioid_load,
+        )
+        from bioid_ai.utils.visualizations import (
+            plot_biological_radar, plot_feature_importance,
+        )
+        _bioid_load()
+        _BIOID_V2 = True
+    except Exception:
+        _BIOID_V2 = False
+
+    # ── Initialisation session_state (persistance inter-rendu) ───────────────
+    for _k in ("bioid_result", "bioid_pdf_bytes", "bioid_pdf_name",
+               "bioid_fi_path", "bioid_radar_path", "bioid_case_id_last",
+               "bioid_cranial", "bioid_postcranial", "bioid_aims_raw",
+               "bioid_examiner_last"):
+        if _k not in st.session_state:
+            st.session_state[_k] = None
+
     st.markdown(
         """
         <div class="page-header" style="background:linear-gradient(135deg,#8E44AD,#6C3483);">
-            <h1>🦴 Médico-légal — Module 3 · BioID AI</h1>
-            <p>Estimation du profil biologique · PCA · Régressions ostéométriques · AIMs</p>
+            <h1>🦴 Médico-légal — Module 3 · BioID AI v2</h1>
+            <p>Estimation du profil biologique · VotingClassifier · PCA · Trotter-Gleser · Rapport PDF</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
+    # Badge moteur actif
+    if _BIOID_V2:
+        st.markdown(
+            "<div style='display:inline-block;padding:0.3rem 0.9rem;background:#E9F7EF;"
+            "border:1px solid #27AE60;border-radius:999px;font-size:0.78rem;font-weight:700;"
+            "color:#1E8449;margin-bottom:1rem;'>✅ BioID AI v2 — bundle actif (95% accuracy)</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            "<div style='display:inline-block;padding:0.3rem 0.9rem;background:#FEF0E7;"
+            "border:1px solid #E67E22;border-radius:999px;font-size:0.78rem;font-weight:700;"
+            "color:#CA6F1E;margin-bottom:1rem;'>⚠️ Mode classique — lancer "
+            "<code>python bioid_ai/training/train.py</code></div>",
+            unsafe_allow_html=True,
+        )
+
     col_form, col_help = st.columns([1.6, 1], gap="large")
 
     with col_form:
+        # ── Identifiants du dossier ───────────────────────────────────────────
+        with st.expander("📋 Informations du dossier", expanded=True):
+            id_col, ex_col = st.columns(2)
+            case_id  = id_col.text_input("N° de dossier", value="CIV-2026-001", key="bioid_case_id")
+            examiner = ex_col.text_input("Examinateur", value="Dr. Konan Yao", key="bioid_examiner")
+
+        # ── Mesures crâniennes ────────────────────────────────────────────────
         with st.expander("💀 Mesures crâniennes — 15 variables FORDISC", expanded=True):
             r1c1, r1c2, r1c3 = st.columns(3)
             GOL = r1c1.number_input("GOL — Glabello-occipital (mm)", 0.0, 230.0, 180.0)
@@ -1595,162 +1642,604 @@ def _render_medicolegal() -> None:
             FOL = r5c2.number_input("FOL — Foramen magnum long. (mm)", 0.0, 55.0, 36.0)
             FOB = r5c3.number_input("FOB — Foramen magnum larg. (mm)", 0.0, 48.0, 30.0)
 
+        # ── Mesures post-crâniennes ───────────────────────────────────────────
         with st.expander("🦴 Mesures post-crâniennes — 8 variables (mm)", expanded=True):
             p1, p2, p3, p4 = st.columns(4)
-            fem_max = p1.number_input("Fémur max (mm)",        0.0, 600.0, 450.0)
+            fem_max = p1.number_input("Fémur max (mm)",          0.0, 600.0, 450.0)
             fem_bic = p2.number_input("Fémur bicondylaire (mm)", 0.0, 595.0, 447.0)
-            tib     = p3.number_input("Tibia (mm)",            0.0, 500.0, 370.0)
-            hum_max = p4.number_input("Humérus max (mm)",      0.0, 450.0, 325.0)
+            tib     = p3.number_input("Tibia (mm)",              0.0, 500.0, 370.0)
+            hum_max = p4.number_input("Humérus max (mm)",        0.0, 450.0, 325.0)
             p5, p6, p7, p8 = st.columns(4)
-            rad_max = p5.number_input("Radius max (mm)",       0.0, 350.0, 245.0)
-            fib_max = p6.number_input("Fibula max (mm)",       0.0, 490.0, 365.0)
-            fem_hd  = p7.number_input("Tête fémur Ø (mm)",     0.0,  70.0,  47.0)
-            hum_hd  = p8.number_input("Tête humérus Ø (mm)",   0.0,  65.0,  46.0)
+            rad_max = p5.number_input("Radius max (mm)",         0.0, 350.0, 245.0)
+            fib_max = p6.number_input("Fibula max (mm)",         0.0, 490.0, 365.0)
+            fem_hd  = p7.number_input("Tête fémur Ø (mm)",       0.0,  70.0,  47.0)
+            hum_hd  = p8.number_input("Tête humérus Ø (mm)",     0.0,  65.0,  46.0)
 
+        # ── Marqueurs ancestraux ──────────────────────────────────────────────
         with st.expander("🧬 Marqueurs ancestraux (AIMs)", expanded=False):
-            ac1, ac2, ac3 = st.columns(3)
-            pc1 = ac1.number_input("AIM_PC1", -5.0, 5.0, 0.0, step=0.01)
-            pc2 = ac2.number_input("AIM_PC2", -5.0, 5.0, 0.0, step=0.01)
-            pc3 = ac3.number_input("AIM_PC3", -5.0, 5.0, 0.0, step=0.01)
+            if _BIOID_V2:
+                st.caption("Mode BioID v2 — marqueurs bruts (PCA appliquée automatiquement)")
+                a1c, a2c, a3c, a4c, a5c = st.columns(5)
+                aim1 = a1c.number_input("AIM_raw_1", -3.0, 3.0, 0.0, step=0.01, key="aim1")
+                aim2 = a2c.number_input("AIM_raw_2", -3.0, 3.0, 0.0, step=0.01, key="aim2")
+                aim3 = a3c.number_input("AIM_raw_3", -3.0, 3.0, 0.0, step=0.01, key="aim3")
+                aim4 = a4c.number_input("AIM_raw_4", -3.0, 3.0, 0.0, step=0.01, key="aim4")
+                aim5 = a5c.number_input("AIM_raw_5", -3.0, 3.0, 0.0, step=0.01, key="aim5")
+                aims_raw = [aim1, aim2, aim3, aim4, aim5]
+                pc1 = pc2 = pc3 = 0.0
+            else:
+                st.caption("Mode classique — composantes PCA directement")
+                ac1, ac2, ac3 = st.columns(3)
+                pc1 = ac1.number_input("AIM_PC1", -5.0, 5.0, 0.0, step=0.01)
+                pc2 = ac2.number_input("AIM_PC2", -5.0, 5.0, 0.0, step=0.01)
+                pc3 = ac3.number_input("AIM_PC3", -5.0, 5.0, 0.0, step=0.01)
+                aims_raw = None
 
-        if st.button("🦴 Analyser le profil BioID", use_container_width=True):
-            with st.spinner("🧠 Estimation du profil biologique en cours — PCA + régressions..."):
-                time.sleep(0.6)
-                try:
-                    result = multibio_predict(bioid_data={
-                        "cranial_measurements": {
-                            "GOL": GOL, "XCB": XCB, "BBH": BBH,
-                            "ZYB": ZYB, "AUB": AUB, "ASB": ASB,
-                            "BNL": BNL, "BPL": BPL, "NLH": NLH,
-                            "NLB": NLB, "OBH": OBH, "OBB": OBB,
-                            "MAB": MAB, "FOL": FOL, "FOB": FOB,
-                        },
-                        "postcranial_measurements": {
-                            "femur_max_length":   fem_max,
-                            "femur_bicondylar":   fem_bic,
-                            "tibia_length":       tib,
-                            "humerus_max_length": hum_max,
-                            "radius_max_length":  rad_max,
-                            "fibula_max_length":  fib_max,
-                            "femur_head_diam":    fem_hd,
-                            "humerus_head_diam":  hum_hd,
-                        },
-                        "aims_pcs": {"AIM_PC1": pc1, "AIM_PC2": pc2, "AIM_PC3": pc3},
-                    })
-                except Exception as e:
-                    st.error(f"Erreur lors de l'analyse : {e}")
-                    result = None
+        # ── Bouton analyse ────────────────────────────────────────────────────
+        if st.button("🦴 Analyser le profil BioID", use_container_width=True, key="btn_bioid"):
+            with st.spinner("🧠 Estimation du profil biologique en cours — BioID AI v2..."):
+                time.sleep(0.4)
 
-            if result:
-                pred_data   = result.get("results", {}).get("module_3_forensic", {})
-                prediction  = pred_data.get("prediction", {})
-                confidence  = pred_data.get("confidence", {})
-                status      = pred_data.get("status", "scaffold_ready")
+                cranial_data = {
+                    "GOL": GOL, "XCB": XCB, "BBH": BBH,
+                    "ZYB": ZYB, "AUB": AUB, "ASB": ASB,
+                    "BNL": BNL, "BPL": BPL, "NLH": NLH,
+                    "NLB": NLB, "OBH": OBH, "OBB": OBB,
+                    "MAB": MAB, "FOL": FOL, "FOB": FOB,
+                }
+                postcranial_data = {
+                    "femur_max_length":   fem_max, "femur_bicondylar":   fem_bic,
+                    "tibia_length":       tib,     "humerus_max_length": hum_max,
+                    "radius_max_length":  rad_max, "fibula_max_length":  fib_max,
+                    "femur_head_diam":    fem_hd,  "humerus_head_diam":  hum_hd,
+                }
 
-                if status == "model_loaded" and prediction:
-                    bio_sex   = prediction.get("biological_sex")
-                    age_death = prediction.get("age_at_death")
-                    ancestry  = prediction.get("ancestry")
-                    stature   = prediction.get("stature_cm")
-                    conf_sex  = confidence.get("biological_sex") if confidence else None
-                    conf_anc  = confidence.get("ancestry") if confidence else None
+                # Réinitialiser les résultats précédents
+                st.session_state["bioid_result"]       = None
+                st.session_state["bioid_pdf_bytes"]    = None
+                st.session_state["bioid_fi_path"]      = None
+                st.session_state["bioid_radar_path"]   = None
+                st.session_state["bioid_cranial"]      = cranial_data
+                st.session_state["bioid_postcranial"]  = postcranial_data
+                st.session_state["bioid_aims_raw"]     = aims_raw
+                st.session_state["bioid_examiner_last"] = examiner
 
-                    st.markdown(
-                        f"""<div class='section-card'>
-                        <div class='section-title'>🦴 Profil biologique estimé</div>
-                        <div style='display:grid;grid-template-columns:1fr 1fr;gap:1rem;'>
-                            <div style='background:#EBF4FD;border-radius:12px;padding:1rem;text-align:center;'>
-                                <div style='font-size:0.72rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;'>Sexe biologique</div>
-                                <div style='font-size:1.6rem;font-weight:800;color:#2E86DE;'>{"♂ Masculin" if bio_sex == "M" else "♀ Féminin" if bio_sex == "F" else bio_sex or "—"}</div>
-                                {f"<div style='font-size:0.78rem;color:#5E7A8A;'>Confiance : {conf_sex:.1%}</div>" if conf_sex else ""}
-                            </div>
-                            <div style='background:#EBF4FD;border-radius:12px;padding:1rem;text-align:center;'>
-                                <div style='font-size:0.72rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;'>Âge au décès</div>
-                                <div style='font-size:1.6rem;font-weight:800;color:#2E86DE;'>{f"{age_death:.0f} ans" if age_death else "—"}</div>
-                            </div>
-                            <div style='background:#F5EEF8;border-radius:12px;padding:1rem;text-align:center;'>
-                                <div style='font-size:0.72rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;'>Ascendance</div>
-                                <div style='font-size:1.3rem;font-weight:800;color:#8E44AD;'>{ancestry or "—"}</div>
-                                {f"<div style='font-size:0.78rem;color:#5E7A8A;'>Confiance : {conf_anc:.1%}</div>" if conf_anc else ""}
-                            </div>
-                            <div style='background:#EAF5EA;border-radius:12px;padding:1rem;text-align:center;'>
-                                <div style='font-size:0.72rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;'>Stature estimée</div>
-                                <div style='font-size:1.6rem;font-weight:800;color:#27AE60;'>{f"{stature:.1f} cm" if stature else "—"}</div>
-                            </div>
-                        </div></div>""",
-                        unsafe_allow_html=True,
-                    )
+                # ── Voie BioID AI v2 ─────────────────────────────────────────
+                if _BIOID_V2:
+                    try:
+                        res = _bioid_full(
+                            cranial=cranial_data,
+                            postcranial=postcranial_data,
+                            aims_raw=aims_raw,
+                        )
+                        st.session_state["bioid_result"]       = res
+                        st.session_state["bioid_case_id_last"] = case_id
+
+                        if res.get("status") == "success":
+                            # Génération PDF stockée en session
+                            try:
+                                _vis_dir = Path(__file__).resolve().parents[1] / "bioid_ai" / "visualizations"
+                                _vis_dir.mkdir(parents=True, exist_ok=True)
+                                safe_cid = case_id.replace("/", "-").replace(" ", "_")
+
+                                # Feature importance
+                                fi = res.get("feature_importances", {})
+                                if fi:
+                                    fp = plot_feature_importance(
+                                        fi,
+                                        title="Variables les plus discriminantes",
+                                        save_path=_vis_dir / f"fi_{safe_cid}.png",
+                                    )
+                                    st.session_state["bioid_fi_path"] = fp if fp and Path(fp).exists() else None
+
+                                # Radar
+                                rp = plot_biological_radar(
+                                    res,
+                                    save_path=_vis_dir / f"radar_{safe_cid}.png",
+                                )
+                                st.session_state["bioid_radar_path"] = rp if rp and Path(rp).exists() else None
+
+                                # PDF
+                                pdf_path = _bioid_pdf(case_id, examiner, res)
+                                if pdf_path and Path(pdf_path).exists():
+                                    st.session_state["bioid_pdf_bytes"] = Path(pdf_path).read_bytes()
+                                    st.session_state["bioid_pdf_name"]  = f"bioid_{safe_cid}.pdf"
+                            except Exception as _asset_err:
+                                st.warning(f"Génération des assets partielle : {_asset_err}")
+
+                    except Exception as v2_err:
+                        st.error(f"Erreur BioID AI v2 : {v2_err}")
+
+                # ── Voie classique ────────────────────────────────────────────
                 else:
-                    st.info("ℹ️ Modèle non encore entraîné — résultat placeholder. "
-                            "Lancer `python scripts/train_forensic_model.py`")
+                    try:
+                        legacy = multibio_predict(bioid_data={
+                            "cranial_measurements":     cranial_data,
+                            "postcranial_measurements": postcranial_data,
+                            "aims_pcs": {"AIM_PC1": pc1, "AIM_PC2": pc2, "AIM_PC3": pc3},
+                        })
+                        st.session_state["bioid_result"] = legacy
+                    except Exception as e:
+                        st.error(f"Erreur lors de l'analyse : {e}")
 
-                _download_report(pred_data, "medicolegal", "dl_bioid")
-                with st.expander("Réponse JSON complète"):
-                    st.json(result)
+    # ═══════════════════════════════════════════════════════════════════════════
+    # AFFICHAGE DES RÉSULTATS — hors du if st.button() pour persister
+    # ═══════════════════════════════════════════════════════════════════════════
+    stored = st.session_state.get("bioid_result")
+    if stored is None:
+        pass  # Pas encore d'analyse
 
-    with col_help:
+    elif _BIOID_V2 and isinstance(stored, dict) and "biological_sex" in stored:
+        # ── Résultats BioID AI v2 ─────────────────────────────────────────────
+        bio_sex   = stored.get("biological_sex")
+        conf_sex  = stored.get("sex_confidence")
+        age_death = stored.get("age_at_death")
+        age_range = stored.get("age_range", "")
+        ancestry  = stored.get("ancestry")
+        conf_anc  = stored.get("ancestry_confidence")
+        anc_proba = stored.get("ancestry_probabilities", {})
+        stature   = stored.get("stature_cm")
+        stat_meth = stored.get("stature_method", "")
+
+        sex_icon  = "♂" if bio_sex and "male" in bio_sex.lower() else "♀"
+        sex_color = "#2E86DE" if sex_icon == "♂" else "#E74C3C"
+
+        # Carte résultats
         st.markdown(
-            """
-            <div class="section-card">
-                <div class="section-title">📐 Repères FORDISC — valeurs typiques</div>
-                <table style="width:100%;font-size:0.78rem;border-collapse:collapse;">
-                    <thead>
-                        <tr style="background:#EBF5FB;">
-                            <th style="padding:0.35rem 0.4rem;color:#5E7A8A;text-align:left;">Mesure</th>
-                            <th style="padding:0.35rem 0.4rem;color:#2E86DE;text-align:center;">♂ H</th>
-                            <th style="padding:0.35rem 0.4rem;color:#E74C3C;text-align:center;">♀ F</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr style="border-bottom:1px solid #EEF2F6;">
-                            <td style="padding:0.3rem 0.4rem;color:#5E7A8A;font-weight:600;">GOL (mm)</td>
-                            <td style="padding:0.3rem 0.4rem;text-align:center;">178–192</td>
-                            <td style="padding:0.3rem 0.4rem;text-align:center;">170–184</td>
-                        </tr>
-                        <tr style="border-bottom:1px solid #EEF2F6;">
-                            <td style="padding:0.3rem 0.4rem;color:#5E7A8A;font-weight:600;">XCB (mm)</td>
-                            <td style="padding:0.3rem 0.4rem;text-align:center;">138–148</td>
-                            <td style="padding:0.3rem 0.4rem;text-align:center;">132–142</td>
-                        </tr>
-                        <tr style="border-bottom:1px solid #EEF2F6;">
-                            <td style="padding:0.3rem 0.4rem;color:#5E7A8A;font-weight:600;">ZYB (mm)</td>
-                            <td style="padding:0.3rem 0.4rem;text-align:center;">126–140</td>
-                            <td style="padding:0.3rem 0.4rem;text-align:center;">116–128</td>
-                        </tr>
-                        <tr style="border-bottom:1px solid #EEF2F6;">
-                            <td style="padding:0.3rem 0.4rem;color:#5E7A8A;font-weight:600;">NLH (mm)</td>
-                            <td style="padding:0.3rem 0.4rem;text-align:center;">50–57</td>
-                            <td style="padding:0.3rem 0.4rem;text-align:center;">46–53</td>
-                        </tr>
-                        <tr style="border-bottom:1px solid #EEF2F6;">
-                            <td style="padding:0.3rem 0.4rem;color:#5E7A8A;font-weight:600;">Fémur max (mm)</td>
-                            <td style="padding:0.3rem 0.4rem;text-align:center;">430–490</td>
-                            <td style="padding:0.3rem 0.4rem;text-align:center;">390–450</td>
-                        </tr>
-                        <tr style="border-bottom:1px solid #EEF2F6;">
-                            <td style="padding:0.3rem 0.4rem;color:#5E7A8A;font-weight:600;">Tibia (mm)</td>
-                            <td style="padding:0.3rem 0.4rem;text-align:center;">345–400</td>
-                            <td style="padding:0.3rem 0.4rem;text-align:center;">310–365</td>
-                        </tr>
-                        <tr>
-                            <td style="padding:0.3rem 0.4rem;color:#5E7A8A;font-weight:600;">Tête fémur Ø (mm)</td>
-                            <td style="padding:0.3rem 0.4rem;text-align:center;">44–52</td>
-                            <td style="padding:0.3rem 0.4rem;text-align:center;">38–46</td>
-                        </tr>
-                    </tbody>
-                </table>
-                <div style="margin-top:0.8rem;font-size:0.75rem;color:#5E7A8A;line-height:1.5;">
-                    Standard : <strong>FORDISC 3.0</strong> (Jantz &amp; Ousley)<br>
-                    Méthodes : PCA craniométrique · Régressions ostéométriques<br>
-                    Populations : africaines subsahariennes (base Howells)
+            f"""<div class='section-card'>
+            <div class='section-title'>🦴 Profil biologique estimé — BioID AI v2</div>
+            <div style='display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.8rem;'>
+                <div style='background:#EBF4FD;border-radius:12px;padding:1rem;text-align:center;'>
+                    <div style='font-size:0.7rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;'>Sexe biologique</div>
+                    <div style='font-size:1.7rem;font-weight:800;color:{sex_color};'>{sex_icon} {bio_sex or "—"}</div>
+                    {f"<div style='font-size:0.8rem;color:#5E7A8A;font-weight:600;'>Confiance : {conf_sex:.1%}</div>" if conf_sex else ""}
                 </div>
-            </div>
-            <div class='disclaimer' style='margin-top:0.8rem;'>
-                ⚠️ Usage médico-légal uniquement — supervision d'un anthropologue judiciaire requise.
-            </div>
-            """,
+                <div style='background:#EBF4FD;border-radius:12px;padding:1rem;text-align:center;'>
+                    <div style='font-size:0.7rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;'>Âge au décès</div>
+                    <div style='font-size:1.7rem;font-weight:800;color:#2E86DE;'>{f"{age_death:.0f} ans" if age_death else "—"}</div>
+                    {f"<div style='font-size:0.8rem;color:#5E7A8A;font-weight:600;'>Intervalle : {age_range}</div>" if age_range else ""}
+                </div>
+                <div style='background:#F5EEF8;border-radius:12px;padding:1rem;text-align:center;'>
+                    <div style='font-size:0.7rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;'>Ascendance</div>
+                    <div style='font-size:1.3rem;font-weight:800;color:#8E44AD;'>{ancestry or "—"}</div>
+                    {f"<div style='font-size:0.8rem;color:#5E7A8A;font-weight:600;'>Confiance : {conf_anc:.1%}</div>" if conf_anc else ""}
+                </div>
+                <div style='background:#EAF5EA;border-radius:12px;padding:1rem;text-align:center;'>
+                    <div style='font-size:0.7rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;'>Stature estimée</div>
+                    <div style='font-size:1.7rem;font-weight:800;color:#27AE60;'>{f"{stature:.1f} cm" if stature else "—"}</div>
+                    {f"<div style='font-size:0.75rem;color:#5E7A8A;'>{stat_meth}</div>" if stat_meth else ""}
+                </div>
+            </div></div>""",
             unsafe_allow_html=True,
         )
+
+        # Probabilités ascendance
+        if anc_proba:
+            st.markdown(
+                "<p style='font-weight:700;font-size:0.92rem;color:#1A2B3C;margin:0.8rem 0 0.4rem;'>"
+                "🧬 Distribution des probabilités d'ascendance</p>",
+                unsafe_allow_html=True,
+            )
+            anc_cols   = st.columns(len(anc_proba))
+            colors_anc = {"Africaine": "#E74C3C", "Europeenne": "#2E86DE",
+                          "Mixte": "#8E44AD", "Européenne": "#2E86DE"}
+            for col_a, (pop, prob) in zip(anc_cols, anc_proba.items()):
+                col_hex = colors_anc.get(pop, "#20B2AA")
+                with col_a:
+                    st.markdown(
+                        f"""<div style='text-align:center;background:rgba(255,255,255,.95);
+                        border-radius:14px;padding:.8rem .4rem;border:2px solid {col_hex};'>
+                        <div style='font-size:.72rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;'>{pop}</div>
+                        <div style='font-size:1.5rem;font-weight:800;color:{col_hex};'>{prob:.1%}</div>
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
+
+        # Visualisations
+        fi_path    = st.session_state.get("bioid_fi_path")
+        radar_path = st.session_state.get("bioid_radar_path")
+        if fi_path or radar_path:
+            st.markdown("<div style='height:.6rem'></div>", unsafe_allow_html=True)
+            viz_col1, viz_col2 = st.columns(2)
+            with viz_col1:
+                if fi_path and Path(fi_path).exists():
+                    st.markdown(
+                        "<p style='font-weight:700;font-size:0.88rem;color:#1A2B3C;margin:0 0 .3rem;'>"
+                        "📊 Importance des variables</p>",
+                        unsafe_allow_html=True,
+                    )
+                    st.image(fi_path, use_container_width=True)
+            with viz_col2:
+                if radar_path and Path(radar_path).exists():
+                    st.markdown(
+                        "<p style='font-weight:700;font-size:0.88rem;color:#1A2B3C;margin:0 0 .3rem;'>"
+                        "🕸️ Radar du profil biologique</p>",
+                        unsafe_allow_html=True,
+                    )
+                    st.image(radar_path, use_container_width=True)
+
+        # ── BOUTONS PDF + IMPRESSION ──────────────────────────────────────────
+        pdf_bytes = st.session_state.get("bioid_pdf_bytes")
+        pdf_name  = st.session_state.get("bioid_pdf_name", "bioid_rapport.pdf")
+
+        st.markdown("<div style='height:.8rem'></div>", unsafe_allow_html=True)
+
+        # Bouton téléchargement PDF complet
+        if pdf_bytes:
+            st.download_button(
+                label="⬇️ Télécharger le rapport PDF complet",
+                data=pdf_bytes,
+                file_name=pdf_name,
+                mime="application/pdf",
+                use_container_width=True,
+                key="dl_bioid_pdf_persist",
+            )
+        else:
+            st.button("⬇️ PDF non disponible", disabled=True, use_container_width=True, key="dl_bioid_pdf_disabled")
+
+        # Bouton impression résumé — juste en dessous
+        st.markdown("<div style='height:.4rem'></div>", unsafe_allow_html=True)
+
+        # ── Construction des blocs HTML pour le résumé d'impression ─────────
+        import datetime as _dt
+        _case_id_disp   = st.session_state.get("bioid_case_id_last") or "—"
+        _examiner_disp  = st.session_state.get("bioid_examiner_last") or "—"
+        _date_now       = _dt.datetime.now().strftime("%d/%m/%Y")
+        _time_now       = _dt.datetime.now().strftime("%H:%M")
+        _age_range_disp = stored.get("age_range", "")
+        _stat_meth_disp = stored.get("stature_method", "Trotter &amp; Gleser 1958")
+        _pca_var        = stored.get("pca_variance", [])
+        _cranial_d      = st.session_state.get("bioid_cranial") or {}
+        _postc_d        = st.session_state.get("bioid_postcranial") or {}
+
+        # Noms lisibles des mesures crâniennes
+        _CRAN_LABELS = {
+            "GOL":"Longueur Max. (GOL)","XCB":"Largeur Max. (XCB)","BBH":"Hauteur Basi-Bregma (BBH)",
+            "ZYB":"Largeur Zygomatique (ZYB)","AUB":"Largeur Biauriculaire (AUB)",
+            "ASB":"Largeur Biastérion (ASB)","BNL":"Longueur Basion-Nasion (BNL)",
+            "BPL":"Longueur Basion-Prosthion (BPL)","NLH":"Hauteur Nasale (NLH)",
+            "NLB":"Largeur Nasale (NLB)","OBH":"Hauteur Orbitaire (OBH)",
+            "OBB":"Largeur Orbitaire (OBB)","MAB":"Largeur Bimaxillaire (MAB)",
+            "FOL":"Longueur Foramen Magnum (FOL)","FOB":"Largeur Foramen Magnum (FOB)",
+        }
+        _POST_LABELS = {
+            "femur_max_length":"Fémur max. (mm)","femur_bicondylar":"Fémur bicondylaire (mm)",
+            "tibia_length":"Tibia (mm)","humerus_max_length":"Humérus max. (mm)",
+            "radius_max_length":"Radius max. (mm)","fibula_max_length":"Fibula max. (mm)",
+            "femur_head_diam":"Diamètre tête fémorale (mm)","humerus_head_diam":"Diamètre tête humérale (mm)",
+        }
+
+        # Tableau mesures crâniennes
+        _cran_rows = "".join(
+            f'<tr><td class="m-lbl">{_CRAN_LABELS.get(k,k)}</td>'
+            f'<td class="m-val">{round(float(v),1) if v else "—"}</td></tr>'
+            for k, v in _cranial_d.items() if v
+        )
+        # Tableau mesures post-crâniennes
+        _post_rows = "".join(
+            f'<tr><td class="m-lbl">{_POST_LABELS.get(k,k)}</td>'
+            f'<td class="m-val">{round(float(v),1) if v else "—"}</td></tr>'
+            for k, v in _postc_d.items() if v
+        )
+
+        # Variance PCA
+        _pca_rows = ""
+        for _i, _v in enumerate(_pca_var[:5], 1):
+            _pv = round(_v * 100, 1) if _v <= 1 else round(float(_v), 1)
+            _bar_w = min(int(_pv), 100)
+            _pca_rows += (
+                f'<tr><td class="m-lbl">PC{_i}</td>'
+                f'<td class="m-val" style="padding:4px 6px;">'
+                f'<div style="display:flex;align-items:center;gap:6px;">'
+                f'<div style="background:#1e3a5f;border-radius:3px;height:8px;width:{_bar_w}px;"></div>'
+                f'<span style="color:#00d4ff;font-weight:700;">{_pv}%</span></div></td></tr>'
+            )
+
+        # Lignes probabilités ascendance
+        _anc_prob_rows = ""
+        if anc_proba:
+            for _pop, _prob in anc_proba.items():
+                _pv2 = int(_prob * 100)
+                _anc_prob_rows += (
+                    f'<tr><td style="padding:4px 6px;font-weight:600;color:#e0e8f0;">{_pop}</td>'
+                    f'<td style="padding:4px 6px;">'
+                    f'<div style="display:flex;align-items:center;gap:6px;">'
+                    f'<div style="background:#1e3a5f;border-radius:3px;height:8px;width:{_pv2}px;"></div>'
+                    f'<span style="color:#00d4ff;font-weight:700;">{_pv2}%</span></div></td></tr>'
+                )
+
+        # Tableau résultats final (colonne droite)
+        _sex_disp  = f"{bio_sex or '—'} (Prob. {conf_sex:.0%})" if conf_sex else (bio_sex or "—")
+        _age_disp  = f"{age_death:.0f} ans" if age_death else "—"
+        _age_et    = _age_range_disp or "—"
+        _anc_disp  = f"{ancestry or '—'} ({conf_anc:.0%})" if conf_anc else (ancestry or "—")
+        _stat_disp = f"{stature:.0f} cm" if stature else "—"
+        _conf_sex_disp = f"{conf_sex:.0%}" if conf_sex else "—"
+        _conf_anc_disp = f"{conf_anc:.0%}" if conf_anc else "—"
+
+        # Feature importances (top 5)
+        _fi_data = stored.get("feature_importances", {})
+        _fi_rows_html = ""
+        if _fi_data:
+            for _fn, _fv in sorted(_fi_data.items(), key=lambda x: x[1], reverse=True)[:5]:
+                _fb = min(int(_fv * 150), 150)
+                _fi_rows_html += (
+                    f'<tr><td style="padding:3px 6px;font-size:11px;color:#a8c4d4;">{_fn}</td>'
+                    f'<td style="padding:3px 6px;">'
+                    f'<div style="display:flex;align-items:center;gap:5px;">'
+                    f'<div style="background:#1e3a5f;border-radius:3px;height:7px;width:{_fb}px;"></div>'
+                    f'<span style="color:#20B2AA;font-size:11px;font-weight:700;">{_fv:.1%}</span>'
+                    f'</div></td></tr>'
+                )
+
+        components.html(
+            f"""
+            <style>
+              * {{ margin:0; padding:0; box-sizing:border-box; }}
+              body {{ background:transparent; }}
+              #btn-print-summary {{
+                width:100%; height:46px;
+                background:#1a7a8a;
+                color:white; border:none; border-radius:8px;
+                font-family:'Segoe UI',Arial,sans-serif;
+                font-size:14px; font-weight:600;
+                cursor:pointer;
+                display:flex; align-items:center; justify-content:center; gap:10px;
+                transition:background .15s;
+              }}
+              #btn-print-summary:hover {{ background:#145f6e; }}
+              #btn-print-summary:active {{ background:#0e4a55; }}
+            </style>
+            <button id="btn-print-summary" onclick="printSummary()">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                   fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 6 2 18 2 18 9"/>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                <rect x="6" y="14" width="12" height="8"/>
+              </svg>
+              Imprimer le résumé
+            </button>
+            <script>
+            function printSummary() {{
+              var html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Rapport BioID AI — {_case_id_disp}</title>
+<style>
+  @page {{ size:A4 landscape; margin:10mm 12mm; }}
+  *{{ box-sizing:border-box; margin:0; padding:0; }}
+  body{{ font-family:'Segoe UI',Arial,sans-serif; background:#0a1628; color:#e0e8f0; font-size:11px; }}
+  /* ── HEADER ── */
+  .top-bar{{ background:#0a1628; border-bottom:3px solid #00d4ff; padding:8px 14px 6px; display:flex; justify-content:space-between; align-items:flex-end; }}
+  .top-bar h1{{ font-size:15px; font-weight:900; color:#ffffff; text-transform:uppercase; letter-spacing:.8px; }}
+  .top-bar .inst{{ font-size:9px; color:#6a8aaa; text-align:right; }}
+  .sub-bar{{ background:#0d1f3c; padding:5px 14px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #1e3a5f; }}
+  .sub-bar .mod{{ font-size:11px; font-weight:700; color:#00d4ff; }}
+  .sub-bar .fac{{ font-size:9px; color:#6a8aaa; }}
+  /* ── 3 COLONNES ── */
+  .body{{ display:grid; grid-template-columns:1fr 1fr 1.1fr; gap:10px; padding:10px 14px; height:calc(100vh - 100px); }}
+  .col{{ background:#0d1f3c; border-radius:8px; border:1px solid #1e3a5f; padding:10px; overflow:hidden; }}
+  .col-title{{ font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.7px; color:#00d4ff;
+               border-bottom:1px solid #1e3a5f; padding-bottom:5px; margin-bottom:8px; }}
+  .col-sub{{ font-size:9px; color:#8ab0c8; margin-bottom:8px; line-height:1.4; }}
+  /* ── TABLES ── */
+  table{{ width:100%; border-collapse:collapse; }}
+  .m-lbl{{ font-size:10px; color:#8ab0c8; padding:3px 4px; border-bottom:1px solid #1e3a5f; }}
+  .m-val{{ font-size:10px; font-weight:700; color:#e0e8f0; padding:3px 4px; border-bottom:1px solid #1e3a5f; text-align:right; }}
+  .sec-lbl{{ font-size:9px; font-weight:700; color:#00d4ff; text-transform:uppercase;
+             padding:6px 4px 3px; letter-spacing:.5px; }}
+  /* ── TABLE RÉSULTATS ── */
+  .res-table{{ width:100%; border-collapse:collapse; }}
+  .res-table th{{ background:#1e3a5f; color:#00d4ff; font-size:9px; text-transform:uppercase;
+                  padding:5px 6px; letter-spacing:.4px; border:1px solid #2a4a6f; text-align:left; }}
+  .res-table td{{ padding:6px 6px; border:1px solid #1e3a5f; font-size:11px; vertical-align:middle; }}
+  .res-table tr:nth-child(even) td{{ background:rgba(255,255,255,.03); }}
+  .param-name{{ color:#a8c4d4; font-weight:600; }}
+  .param-val{{ color:#ffffff; font-weight:800; font-size:12px; }}
+  .param-conf{{ color:#00d4ff; font-weight:700; text-align:center; }}
+  .param-et{{ color:#8ab0c8; text-align:center; font-size:10px; }}
+  /* ── FOOTER ── */
+  .footer{{ background:#0a1628; border-top:2px solid #00d4ff; padding:5px 14px;
+            display:flex; justify-content:space-between; align-items:center; font-size:9px; color:#6a8aaa; }}
+  .footer .badge{{ background:#00d4ff; color:#0a1628; border-radius:4px; padding:1px 6px; font-weight:800; font-size:9px; }}
+  @media print {{ body{{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }} }}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div>
+    <h1>Rapport d'Analyse Médico-Légale : Estimation du Profil Biologique (BioID AI)</h1>
+    <div style="font-size:11px;color:#00d4ff;font-weight:700;margin-top:2px;">
+      Forensic Module 3 &nbsp;·&nbsp; BioID AI &nbsp;·&nbsp; Estimation du Profil Biologique
+    </div>
+  </div>
+  <div class="inst">Faculté de Médecine Forensique<br>Laboratoire d'Anthropologie</div>
+</div>
+<div class="sub-bar">
+  <div class="mod">KANÉA — Knowledge Anthropology &amp; Neural Engine for Africa &nbsp;·&nbsp; Module 3 Médico-Légal</div>
+  <div class="fac">VotingClassifier · RandomForest · XGBoost · PCA · Trotter-Gleser</div>
+</div>
+
+<div class="body">
+
+  <!-- ═══ COL 1 : ACQUISITION DES DONNÉES ═══ -->
+  <div class="col">
+    <div class="col-title">Acquisition des Données</div>
+    <div class="col-sub">
+      Entrée des données : Coordonnées de Repères Crâniens (Landmarks) &amp; Mesures Anthropométriques.
+    </div>
+
+    {'<div class="sec-lbl">Mesures Crâniennes (FORDISC 3.0)</div><table>' + _cran_rows + '</table>' if _cran_rows else '<div class="col-sub" style="color:#3a5a7a;">Aucune mesure crânienne saisie.</div>'}
+
+    {'<div class="sec-lbl" style="margin-top:8px;">Mesures Post-Crâniennes</div><table>' + _post_rows + '</table>' if _post_rows else ''}
+
+    {'<div class="sec-lbl" style="margin-top:8px;">Variables Discriminantes (top 5)</div><table>' + _fi_rows_html + '</table>' if _fi_rows_html else ''}
+  </div>
+
+  <!-- ═══ COL 2 : PCA & ANALYSE ═══ -->
+  <div class="col">
+    <div class="col-title">PCA — Analyse en Composantes Principales</div>
+    <div class="col-sub">
+      Réduction de dimensionnalité par PCA appliquée aux marqueurs AIMs.
+      Visualisation de la variation morphologique et des regroupements de population.
+    </div>
+
+    {'<div class="sec-lbl">Variance expliquée par composante</div><table>' + _pca_rows + '</table>' if _pca_rows else '<div class="col-sub" style="color:#3a5a7a;">PCA non disponible (AIMs bruts non fournis).</div>'}
+
+    <div class="sec-lbl" style="margin-top:10px;">Régressions &amp; BioID AI</div>
+    <div class="col-sub">
+      Modèles de régression. Prédiction des variables biologiques.
+      <br><br>
+      • <strong style="color:#e0e8f0;">Âge</strong> : VotingRegressor (RF + GB + ElasticNet)
+      <br>
+      • <strong style="color:#e0e8f0;">Sexe</strong> : VotingClassifier (RF + GB) — données multivariées
+      <br>
+      • <strong style="color:#e0e8f0;">Stature</strong> : Régression linéaire Trotter-Gleser 1958
+      <br>
+      • <strong style="color:#e0e8f0;">Ascendance</strong> : RandomForest + PCA (AIMs)
+    </div>
+
+    {'<div class="sec-lbl" style="margin-top:8px;">Probabilités d\'Ascendance</div><table>' + _anc_prob_rows + '</table>' if _anc_prob_rows else ''}
+  </div>
+
+  <!-- ═══ COL 3 : RÉSULTATS FINAUX ═══ -->
+  <div class="col">
+    <div class="col-title">Estimation du Profil Biologique Final</div>
+    <div class="col-sub" style="margin-bottom:10px;">Résultats de l'estimation computationnelle.</div>
+
+    <table class="res-table">
+      <thead>
+        <tr>
+          <th>Paramètre Biologique</th>
+          <th>Estimation</th>
+          <th style="text-align:center;">Fiabilité (%)</th>
+          <th style="text-align:center;">Écart-Type</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="param-name">Sexe</td>
+          <td class="param-val" style="color:#4fc3f7;">{_sex_disp}</td>
+          <td class="param-conf">{_conf_sex_disp}</td>
+          <td class="param-et">—</td>
+        </tr>
+        <tr>
+          <td class="param-name">Âge au Décès</td>
+          <td class="param-val" style="color:#81d4fa;">{_age_disp}</td>
+          <td class="param-conf">—</td>
+          <td class="param-et">{_age_et}</td>
+        </tr>
+        <tr>
+          <td class="param-name">Origine Biogéographique</td>
+          <td class="param-val" style="color:#ce93d8;">{_anc_disp}</td>
+          <td class="param-conf">{_conf_anc_disp}</td>
+          <td class="param-et">—</td>
+        </tr>
+        <tr>
+          <td class="param-name">Stature</td>
+          <td class="param-val" style="color:#a5d6a7;">{_stat_disp}</td>
+          <td class="param-conf">—</td>
+          <td class="param-et">± 4 cm</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="margin-top:12px;padding:8px;background:rgba(0,212,255,.07);border-radius:6px;border:1px solid #1e3a5f;">
+      <div style="font-size:9px;color:#00d4ff;font-weight:700;text-transform:uppercase;margin-bottom:5px;">Méthodes de Référence</div>
+      <div style="font-size:10px;color:#8ab0c8;line-height:1.6;">
+        • PCA sur marqueurs AIMs (5 marqueurs → 3 PC)<br>
+        • VotingClassifier (RF + Gradient Boosting)<br>
+        • Stature : {_stat_meth_disp}<br>
+        • Analyse craniométrique FORDISC 3.0<br>
+        • Base de référence : données synthétiques FORDISC
+      </div>
+    </div>
+
+    <div style="margin-top:10px;padding:6px;background:rgba(32,178,170,.1);border-radius:6px;border:1px solid #20B2AA;">
+      <div style="font-size:9px;color:#20B2AA;font-weight:700;text-transform:uppercase;">Version du Modèle</div>
+      <div style="font-size:11px;color:#e0e8f0;font-weight:700;margin-top:2px;">
+        BioID AI v{stored.get('model_version', '2.0.0')} &nbsp;·&nbsp; <span style="color:#00d4ff;">✓ Statut : Succès</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  <span>Date : <strong style="color:#e0e8f0;">{_date_now}</strong> &nbsp;|&nbsp;
+        Heure : <strong style="color:#e0e8f0;">{_time_now}</strong> &nbsp;|&nbsp;
+        Case ID : <strong style="color:#e0e8f0;">{_case_id_disp}</strong> &nbsp;|&nbsp;
+        Expert : <strong style="color:#e0e8f0;">{_examiner_disp}</strong>
+  </span>
+  <span>
+    <span class="badge">BioID AI</span> &nbsp;
+    KANÉA · www.kanea-bioid.ai
+  </span>
+</div>
+
+</body>
+</html>`;
+              var win = window.open('', '_blank', 'width=1100,height=780');
+              win.document.write(html);
+              win.document.close();
+              win.onload = function() {{ setTimeout(function(){{ win.print(); }}, 700); }};
+            }}
+            </script>
+            """,
+            height=56,
+        )
+
+        # JSON complet
+        with st.expander("🔍 Réponse JSON complète"):
+            st.json(stored)
+
+    elif not _BIOID_V2 and isinstance(stored, dict):
+        # ── Résultats voie classique ──────────────────────────────────────────
+        pred_data  = stored.get("results", {}).get("module_3_forensic", {})
+        prediction = pred_data.get("prediction", {})
+        confidence = pred_data.get("confidence", {})
+        status_cls = pred_data.get("status", "scaffold_ready")
+
+        if status_cls == "model_loaded" and prediction:
+            bio_sex   = prediction.get("biological_sex")
+            age_death = prediction.get("age_at_death")
+            ancestry  = prediction.get("ancestry")
+            stature   = prediction.get("stature_cm")
+            conf_sex  = confidence.get("biological_sex") if confidence else None
+            conf_anc  = confidence.get("ancestry")       if confidence else None
+            st.markdown(
+                f"""<div class='section-card'>
+                <div class='section-title'>🦴 Profil biologique estimé</div>
+                <div style='display:grid;grid-template-columns:1fr 1fr;gap:1rem;'>
+                    <div style='background:#EBF4FD;border-radius:12px;padding:1rem;text-align:center;'>
+                        <div style='font-size:0.72rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;'>Sexe biologique</div>
+                        <div style='font-size:1.6rem;font-weight:800;color:#2E86DE;'>{"♂ Masculin" if bio_sex == "M" else "♀ Féminin" if bio_sex == "F" else bio_sex or "—"}</div>
+                        {f"<div style='font-size:0.78rem;color:#5E7A8A;'>Confiance : {conf_sex:.1%}</div>" if conf_sex else ""}
+                    </div>
+                    <div style='background:#EBF4FD;border-radius:12px;padding:1rem;text-align:center;'>
+                        <div style='font-size:0.72rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;'>Âge au décès</div>
+                        <div style='font-size:1.6rem;font-weight:800;color:#2E86DE;'>{f"{age_death:.0f} ans" if age_death else "—"}</div>
+                    </div>
+                    <div style='background:#F5EEF8;border-radius:12px;padding:1rem;text-align:center;'>
+                        <div style='font-size:0.72rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;'>Ascendance</div>
+                        <div style='font-size:1.3rem;font-weight:800;color:#8E44AD;'>{ancestry or "—"}</div>
+                        {f"<div style='font-size:0.78rem;color:#5E7A8A;'>Confiance : {conf_anc:.1%}</div>" if conf_anc else ""}
+                    </div>
+                    <div style='background:#EAF5EA;border-radius:12px;padding:1rem;text-align:center;'>
+                        <div style='font-size:0.72rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;'>Stature estimée</div>
+                        <div style='font-size:1.6rem;font-weight:800;color:#27AE60;'>{f"{stature:.1f} cm" if stature else "—"}</div>
+                    </div>
+                </div></div>""",
+                unsafe_allow_html=True,
+            )
+            _download_report(pred_data, "medicolegal", "dl_bioid_legacy")
+        else:
+            st.info("ℹ️ Modèle non encore entraîné — lancer `python bioid_ai/training/train.py`")
+
+        with st.expander("🔍 Réponse JSON complète"):
+            st.json(stored)
 
 
 def _render_breast_cancer() -> None:
@@ -2057,7 +2546,7 @@ def page_parametres() -> None:
         modules_status = [
             ("Module 1", "🔬 MalariaScan AI",   "ResNet34 · NIH 27k images",    Path("models/deep_learning/malaria_model.pth")),
             ("Module 2", "📊 Biometry AI",        "RF + XGBoost · z-scores OMS",  Path("models/machine_learning/nutrition_model.pkl")),
-            ("Module 3", "🦴 BioID AI",           "PCA + régressions ostéo",      Path("models/machine_learning/forensic_model.pkl")),
+            ("Module 3", "🦴 BioID AI v2",         "VotingClassifier + PCA + Trotter-Gleser", Path("models/machine_learning/bioid_bundle.pkl")),
             ("Module 4", "🩺 Breast Cancer AI",   "EfficientNet-B0 · 3 classes",  Path("models/deep_learning/breast_cancer_model.pth")),
         ]
 

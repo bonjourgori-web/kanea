@@ -33,3 +33,7 @@ desktop.ini
 # ── Secrets ─────────────────────────────────────────────────────────────────────
 .env
 secrets.toml
+
+# ── Rapports générés (outputs BioID AI — ne pas committer) ───────────────────────
+reports/*.pdf
+bioid_ai/visualizations/*.png
