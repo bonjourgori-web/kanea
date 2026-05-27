@@ -18,6 +18,9 @@ scikit-learn>=1.3.0
 xgboost>=2.0.0
 joblib>=1.3.0
 
+# ── ONNX Runtime (malaria_scan_ai — remplace torch sur Streamlit Cloud) ─────────
+onnxruntime>=1.17.0
+
 # ── BioID AI — Rapports PDF & Visualisations ────────────────────────────────────
 reportlab>=4.1.0
 qrcode[pil]>=7.4.2
