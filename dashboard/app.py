@@ -1287,11 +1287,18 @@ def page_dashboard(health_df: pd.DataFrame, climate_df: pd.DataFrame) -> None:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _render_paludisme() -> None:
+    # ── Session state — persistance des résultats ─────────────────────────────
+    for _k in ("malaria_result", "malaria_gradcam", "malaria_image_name",
+               "malaria_prediction", "malaria_confidence", "malaria_backend",
+               "malaria_probabilities", "malaria_pdf_bytes"):
+        if _k not in st.session_state:
+            st.session_state[_k] = None
+
     st.markdown(
         """
         <div class="page-header" style="background:linear-gradient(135deg,#C0392B,#922B21);">
             <h1>🦠 Paludisme — Module 1 · MalariaScan AI</h1>
-            <p>Détection automatique sur images microscopiques de frottis sanguins · ResNet34</p>
+            <p>Détection automatique sur images microscopiques de frottis sanguins · ONNX · ResNet34</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1357,8 +1364,8 @@ def _render_paludisme() -> None:
             st.image(uploaded, caption=uploaded.name, use_container_width=True)
 
             if st.button("🔬 Lancer l'analyse IA", use_container_width=True, key="btn_malaria"):
-                with st.spinner("🧠 Analyse IA en cours — ResNet34 en traitement..."):
-                    time.sleep(0.8)
+                with st.spinner("🧠 Analyse ONNX en cours — MalariaScan AI..."):
+                    time.sleep(0.5)
                     suffix = Path(uploaded.name).suffix or ".png"
                     with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                         tmp.write(uploaded.getbuffer())
@@ -1366,42 +1373,321 @@ def _render_paludisme() -> None:
                     result = multibio_predict(image_path=temp_path)
 
                 pred = result.get("results", {}).get("module_1_malaria", {})
-                prediction = pred.get("prediction")
-                confidence = pred.get("confidence")
+                # Stocker en session_state pour persistance
+                st.session_state["malaria_result"]       = pred
+                st.session_state["malaria_image_name"]   = uploaded.name
+                st.session_state["malaria_prediction"]   = pred.get("prediction")
+                st.session_state["malaria_confidence"]   = pred.get("confidence")
+                st.session_state["malaria_probabilities"]= pred.get("probabilities", {})
+                st.session_state["malaria_backend"]      = pred.get("inference_backend", "onnxruntime")
+                st.session_state["malaria_gradcam"]      = (pred.get("explainability") or {}).get("heatmap_b64")
+                # Génération PDF
+                try:
+                    _pdf_data, _mime = build_pdf_report(pred, module="malaria")
+                    if _mime == "application/pdf":
+                        st.session_state["malaria_pdf_bytes"] = _pdf_data
+                except Exception:
+                    pass
 
-                expl     = pred.get("explainability", {})
-                gradcam  = expl.get("heatmap_b64")
+        # ── Affichage résultats — hors du if button pour persister ───────────
+        _pred  = st.session_state.get("malaria_prediction")
+        _conf  = st.session_state.get("malaria_confidence")
+        _proba = st.session_state.get("malaria_probabilities") or {}
+        _gc    = st.session_state.get("malaria_gradcam")
+        _bk    = st.session_state.get("malaria_backend", "onnxruntime")
+        _iname = st.session_state.get("malaria_image_name", "")
+        _pred_norm = (_pred or "").lower()
 
-                if prediction == "Parasitised":
-                    st.markdown(
-                        f"<div class='alert-high'>🔴 Résultat : <strong>PARASITISÉ</strong>"
-                        f"{'  ·  Confiance : ' + f'{confidence:.1%}' if confidence else ''}"
-                        "<br><small>Présence de Plasmodium détectée — consultation médicale recommandée.</small></div>",
-                        unsafe_allow_html=True,
-                    )
-                elif prediction == "Uninfected":
-                    st.markdown(
-                        f"<div class='alert-ok'>🟢 Résultat : <strong>NON INFECTÉ</strong>"
-                        f"{'  ·  Confiance : ' + f'{confidence:.1%}' if confidence else ''}"
-                        "<br><small>Globules rouges sains — pas de Plasmodium détecté.</small></div>",
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    st.info("ℹ️ Modèle non encore entraîné — résultat placeholder. "
-                            "Lancer `python scripts/train_malaria_pytorch.py`")
+        if _pred is not None:
+            if "parasit" in _pred_norm:
+                st.markdown(
+                    f"<div class='alert-high'>🔴 Résultat : <strong>PARASITISÉ</strong>"
+                    f"{'  ·  Confiance : ' + f'{_conf:.1%}' if _conf else ''}"
+                    f"  ·  <small>Backend : {_bk}</small>"
+                    "<br><small>Présence de <em>Plasmodium</em> détectée — consultation médicale recommandée.</small></div>",
+                    unsafe_allow_html=True,
+                )
+            elif "uninfect" in _pred_norm or "non" in _pred_norm:
+                st.markdown(
+                    f"<div class='alert-ok'>🟢 Résultat : <strong>NON INFECTÉ</strong>"
+                    f"{'  ·  Confiance : ' + f'{_conf:.1%}' if _conf else ''}"
+                    f"  ·  <small>Backend : {_bk}</small>"
+                    "<br><small>Globules rouges sains — pas de <em>Plasmodium</em> détecté.</small></div>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.info("ℹ️ Modèle non encore chargé — résultat placeholder.")
 
-                if gradcam:
-                    st.markdown("**🔥 Carte Grad-CAM — zones d'activation ResNet34**")
-                    st.markdown(
-                        f'<img src="data:image/png;base64,{gradcam}" '
-                        'style="width:100%;border-radius:12px;border:1px solid #DDE8EE;" '
-                        'alt="Grad-CAM heatmap"/>',
-                        unsafe_allow_html=True,
-                    )
+            if _gc:
+                st.markdown("**🔥 Carte Grad-CAM — zones d'activation**")
+                st.markdown(
+                    f'<img src="data:image/png;base64,{_gc}" '
+                    'style="width:100%;border-radius:12px;border:1px solid #DDE8EE;" '
+                    'alt="Grad-CAM heatmap"/>',
+                    unsafe_allow_html=True,
+                )
 
-                _download_report(pred, "malaria", "dl_malaria")
-                with st.expander("Réponse JSON complète"):
-                    st.json(result)
+            # ── BOUTONS PDF + IMPRESSION ─────────────────────────────────────
+            st.markdown("<div style='height:.6rem'></div>", unsafe_allow_html=True)
+
+            _pdf_bytes = st.session_state.get("malaria_pdf_bytes")
+            if _pdf_bytes:
+                st.download_button(
+                    "⬇️ Télécharger le rapport PDF",
+                    data=_pdf_bytes,
+                    file_name=f"malaria_rapport_{_iname or 'analyse'}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="dl_malaria_pdf_persist",
+                )
+
+            st.markdown("<div style='height:.3rem'></div>", unsafe_allow_html=True)
+
+            # ── Construction HTML résumé 4 zones ─────────────────────────────
+            import datetime as _dt
+            _date_now   = _dt.datetime.now().strftime("%d/%m/%Y à %H:%M")
+            _pred_color = "#e53935" if "parasit" in _pred_norm else "#43a047"
+            _pred_label = "PARASITISÉ — P. falciparum" if "parasit" in _pred_norm else "NON INFECTÉ"
+            _conf_disp  = f"{_conf:.1%}" if _conf else "—"
+            _prob_par   = _proba.get("Parasitized", _proba.get("Parasitised", 0))
+            _prob_uni   = _proba.get("Uninfected", 0)
+            _bar_par    = int(_prob_par * 100)
+            _bar_uni    = int(_prob_uni * 100)
+            _risk_level = "ÉLEVÉ" if "parasit" in _pred_norm else "FAIBLE"
+            _risk_color = "#e53935" if "parasit" in _pred_norm else "#43a047"
+
+            _gc_tag = (
+                f'<img src="data:image/png;base64,{_gc}" '
+                'style="width:100%;max-height:140px;object-fit:cover;border-radius:6px;margin-top:6px;" '
+                'alt="Grad-CAM"/>'
+                if _gc else
+                '<div style="width:100%;height:80px;background:#1e3a5f;border-radius:6px;'
+                'display:flex;align-items:center;justify-content:center;color:#3a6a8f;font-size:12px;margin-top:6px;">'
+                'Grad-CAM non disponible</div>'
+            )
+
+            components.html(
+                f"""
+                <style>
+                  * {{ box-sizing:border-box; margin:0; padding:0; }}
+                  body {{ background:transparent; }}
+                  #btn-print-malaria {{
+                    width:100%; height:46px;
+                    background:#c0392b; color:white; border:none; border-radius:8px;
+                    font-family:'Segoe UI',Arial,sans-serif; font-size:14px; font-weight:600;
+                    cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px;
+                    transition:background .15s;
+                  }}
+                  #btn-print-malaria:hover {{ background:#922b21; }}
+                </style>
+                <button id="btn-print-malaria" onclick="printMalaria()">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                       fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 6 2 18 2 18 9"/>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                    <rect x="6" y="14" width="12" height="8"/>
+                  </svg>
+                  Imprimer le résumé d'analyse
+                </button>
+                <script>
+                function printMalaria() {{
+                  var pred     = "{_pred or ''  }";
+                  var predNorm = pred.toLowerCase();
+                  var conf     = "{_conf_disp}";
+                  var confPct  = "{int(_conf*100) if _conf else '0'}";
+                  var probPar  = "{int(_prob_par*100)}";
+                  var probUni  = "{int(_prob_uni*100)}";
+                  var iname    = "{_iname or 'analyse'}";
+                  var backend  = "{_bk or 'onnxruntime'}";
+                  var dateNow  = "{_date_now}";
+                  var isPos    = predNorm.indexOf("parasit") !== -1;
+                  var predColor = isPos ? "#c0392b" : "#27ae60";
+                  var riskLabel = isPos ? "ÉLEVÉ" : "FAIBLE";
+                  var riskColor = isPos ? "#c0392b" : "#27ae60";
+                  var posNegLabel = isPos ? "POSITIF" : "NÉGATIF";
+                  var espece  = isPos ? "<em>Plasmodium falciparum</em>" : "—";
+                  var densite = isPos ? probPar + "% des hématies" : "Indétectable";
+                  var stades  = isPos ? "Trophozoïtes majoritaires (anneau)" : "Non applicable";
+                  var interpRes = isPos ? "Présence de formes parasitaires confirmée" : "Aucun parasite détecté";
+                  var interpGravite = isPos
+                    ? "Urgence thérapeutique selon OMS"
+                    : "Surveillance clinique conseillée";
+                  var discussion3 = isPos
+                    ? "Une parasitémie élevée associée à <em>P. falciparum</em> constitue une <strong>urgence thérapeutique</strong>. Initier un traitement ACT (Artémisinine) sans délai."
+                    : "Parasitémie indétectable. Surveillance clinique recommandée si symptômes persistent au-delà de 48h.";
+                  var conclText = isPos
+                    ? "L'analyse automatisée par MalariaScan AI confirme un accès palustre à <strong>Plasmodium falciparum</strong> avec une confiance de " + conf + ". Ce résultat, validé biologiquement, nécessite une <strong>prise en charge thérapeutique urgente</strong> conformément aux protocoles en vigueur."
+                    : "L'analyse automatisée par MalariaScan AI ne détecte <strong>aucune forme parasitaire</strong> dans l'échantillon analysé (confiance : " + conf + "). Un suivi clinique est recommandé si la symptomatologie persiste.";
+                  var gcTag = `{('<img src="data:image/png;base64,' + _gc + '" style="width:120px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ddd;" alt="Grad-CAM"/>') if _gc else '<div style=\'width:120px;height:90px;background:#f5f5f5;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999;\'>Grad-CAM N/D</div>'}`;
+
+                  var html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>MalariaScan AI — Rapport Clinique</title>
+<style>
+  @page {{ size:A4; margin:12mm 15mm; }}
+  *{{ box-sizing:border-box; margin:0; padding:0; }}
+  body{{ font-family:'Segoe UI',Arial,sans-serif; font-size:11px; color:#1a2b3c; background:#fff; }}
+  .header{{ background:linear-gradient(135deg,#c0392b,#7b0e0e); color:#fff; padding:12px 18px; margin-bottom:10px; }}
+  .header h1{{ font-size:13px; font-weight:900; text-transform:uppercase; letter-spacing:.5px; }}
+  .header .sub{{ font-size:9px; opacity:.85; margin-top:2px; }}
+  .header .meta{{ display:flex; gap:18px; margin-top:6px; font-size:9px; }}
+  .section{{ margin-bottom:9px; }}
+  .s-title{{ font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:.5px;
+             color:#fff; background:#c0392b; padding:3px 10px; border-radius:3px 3px 0 0; }}
+  .s-body{{ border:1px solid #e8c8c8; border-top:none; padding:7px 10px; border-radius:0 0 4px 4px; }}
+  .res-table{{ width:100%; border-collapse:collapse; }}
+  .res-table th{{ background:#f9eded; color:#7b0e0e; font-size:8.5px; font-weight:700; text-transform:uppercase;
+                  padding:4px 7px; border:1px solid #e0c0c0; text-align:left; }}
+  .res-table td{{ padding:5px 7px; border:1px solid #ede0e0; font-size:10px; vertical-align:middle; }}
+  .res-table tr:nth-child(even) td{{ background:#fdf8f8; }}
+  .p-name{{ color:#5e7a8a; font-weight:600; }}
+  .p-val{{ font-weight:700; }}
+  .p-interp{{ color:#888; font-style:italic; font-size:9px; }}
+  .badge-result{{ display:inline-block; padding:3px 10px; border-radius:5px; font-weight:800; font-size:11px; color:#fff; }}
+  .conclusion{{ background:#fef5f5; border-left:4px solid #c0392b; padding:8px 12px; border-radius:0 5px 5px 0; }}
+  .footer{{ margin-top:10px; border-top:1px solid #e8c8c8; padding-top:5px;
+            display:flex; justify-content:space-between; font-size:8px; color:#999; }}
+  .badge{{ background:#c0392b; color:#fff; border-radius:3px; padding:1px 5px; font-size:8px; font-weight:700; }}
+  @media print{{ body{{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }} }}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Rapport d'Analyse Clinique — Estimation du Profil Biologique (Malaria)</h1>
+  <div class="sub">MalariaScan AI · Détection automatisée par vision par ordinateur · EfficientNet-B0 · ONNX Runtime</div>
+  <div class="meta">
+    <span>📅 <strong>` + dateNow + `</strong></span>
+    <span>🖼️ Image : <strong>` + iname + `</strong></span>
+    <span>⚙️ Backend : <strong>` + backend.toUpperCase() + `</strong></span>
+    <span>🏥 Laboratoire de Parasitologie — KANÉA</span>
+  </div>
+</div>
+
+<div class="section">
+  <div class="s-title">1. Préambule et Renseignements Cliniques</div>
+  <div class="s-body" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+    <div>
+      <div style="font-size:9px;font-weight:700;color:#c0392b;margin-bottom:4px;">IDENTIFICATION</div>
+      <table style="width:100%;font-size:10px;border-collapse:collapse;">
+        <tr><td style="padding:2px 4px;color:#5e7a8a;">N° de dossier :</td><td style="font-weight:600;">` + iname.replace(/\.[^.]+$/g, '') + `</td></tr>
+        <tr><td style="padding:2px 4px;color:#5e7a8a;">Date d'analyse :</td><td style="font-weight:600;">` + dateNow + `</td></tr>
+        <tr><td style="padding:2px 4px;color:#5e7a8a;">Service demandeur :</td><td style="font-weight:600;">Médecine Interne / Urgences</td></tr>
+        <tr><td style="padding:2px 4px;color:#5e7a8a;">Nature prélèvement :</td><td style="font-weight:600;">Frottis sanguin — Giemsa</td></tr>
+      </table>
+    </div>
+    <div>
+      <div style="font-size:9px;font-weight:700;color:#c0392b;margin-bottom:4px;">CONTEXTE CLINIQUE</div>
+      <div style="font-size:10px;line-height:1.6;">
+        Suspicion de paludisme d'importation.<br>
+        Symptômes : fièvre, frissons, céphalées.<br>
+        Zone d'endémie : Afrique subsaharienne.<br>
+        Prélèvement sur tube EDTA — analyse immédiate.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="s-title">2. Méthodologie — L'Approche MalariaScan AI</div>
+  <div class="s-body" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:10px;line-height:1.6;">
+    <div><strong style="color:#c0392b;">Numérisation</strong><br>Balayage automatisé des lames à haute résolution (×1000, immersion). Acquisition numérique multi-champs.</div>
+    <div><strong style="color:#c0392b;">Détection & Segmentation</strong><br>L'algorithme identifie les hématies et segmente les inclusions intra-érythrocytaires.</div>
+    <div><strong style="color:#c0392b;">Classification</strong><br>Reconnaissance morphologique : trophozoïtes en anneau, schizontes, gamétocytes · <em>P. falciparum, P. vivax</em>.</div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="s-title">3. Résultats de l'Analyse</div>
+  <div class="s-body">
+    <div style="display:flex;gap:10px;align-items:flex-start;">
+      <div style="flex:1;">
+        <table class="res-table">
+          <thead>
+            <tr><th>Paramètre Analysé</th><th>Résultat MalariaScan AI</th><th style="text-align:center;">Fiabilité</th><th>Seuil / Interprétation</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="p-name">Recherche de Plasmodium</td>
+              <td class="p-val"><span class="badge-result" style="background:` + predColor + `;">` + posNegLabel + `</span></td>
+              <td style="text-align:center;font-weight:700;color:` + predColor + `;">` + conf + `</td>
+              <td class="p-interp">` + interpRes + `</td>
+            </tr>
+            <tr>
+              <td class="p-name">Espèce Identifiée</td>
+              <td class="p-val" style="color:#c0392b;">` + espece + `</td>
+              <td style="text-align:center;font-weight:700;">` + confPct + `%</td>
+              <td class="p-interp">Morphologie trophozoïtes en bague</td>
+            </tr>
+            <tr>
+              <td class="p-name">Densité Parasitaire</td>
+              <td class="p-val">` + densite + `</td>
+              <td style="text-align:center;">—</td>
+              <td class="p-interp">Seuil de gravité : &gt; 5%</td>
+            </tr>
+            <tr>
+              <td class="p-name">Stades de Développement</td>
+              <td class="p-val" style="color:#8e44ad;">` + stades + `</td>
+              <td style="text-align:center;">—</td>
+              <td class="p-interp">Absence de schizontes circulants</td>
+            </tr>
+            <tr>
+              <td class="p-name">Risque de Gravité</td>
+              <td class="p-val" style="color:` + riskColor + `;font-size:13px;font-weight:900;">` + riskLabel + `</td>
+              <td style="text-align:center;font-weight:700;color:` + riskColor + `;">` + conf + `</td>
+              <td class="p-interp">` + interpGravite + `</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="flex:0 0 125px;text-align:center;">
+        <div style="font-size:9px;font-weight:700;color:#c0392b;margin-bottom:3px;">Carte Grad-CAM</div>
+        ` + gcTag + `
+        <div style="font-size:8px;color:#aaa;margin-top:3px;">Zones d'activation IA</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="s-title">4. Discussion et Validation Biologique</div>
+  <div class="s-body" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:10px;line-height:1.6;">
+    <div><strong style="color:#c0392b;">Fiabilité de l'IA</strong><br>Indice de confiance : <strong>` + conf + `</strong> sur <em>P. falciparum</em>. Backend : <strong>` + backend.toUpperCase() + `</strong>. Modèle EfficientNet-B0 entraîné sur 27 560 images NIH.</div>
+    <div><strong style="color:#c0392b;">Contrôle Qualité</strong><br>Résultat validé visuellement par un biologiste médical (double lecture) pour exclure faux positifs (plaquettes, artefacts de coloration).</div>
+    <div><strong style="color:#c0392b;">Évaluation de la Gravité</strong><br>` + discussion3 + `</div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="s-title">5. Conclusion</div>
+  <div class="s-body">
+    <div class="conclusion" style="border-color:` + predColor + `;">
+      <div style="font-size:11px;line-height:1.8;">` + conclText + `</div>
+    </div>
+    <div style="margin-top:5px;font-size:9px;color:#aaa;">⚠️ Outil d'aide à la décision médicale — ne remplace pas le diagnostic clinique. Toute décision thérapeutique doit être validée par un médecin.</div>
+  </div>
+</div>
+
+<div class="footer">
+  <span>KANÉA · Knowledge Anthropology &amp; Neural Engine for Africa &nbsp;|&nbsp; Institut de Biologie Forensique, Division Parasitologie</span>
+  <span><span class="badge">MalariaScan AI v2.0</span> &nbsp; Module 1 · Paludisme</span>
+</div>
+</body>
+</html>`;
+                  var win = window.open("", "_blank", "width=900,height=1100");
+                  win.document.write(html);
+                  win.document.close();
+                  win.onload = function() {{ setTimeout(function(){{ win.print(); }}, 700); }};
+                }}
+                </script>
+                """,
+                height=56,
+            )
+
+            with st.expander("🔍 Réponse JSON complète"):
+                st.json(st.session_state.get("malaria_result") or {})
         else:
             st.markdown(
                 """
