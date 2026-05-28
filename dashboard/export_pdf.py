@@ -12,9 +12,14 @@ Usage depuis le dashboard Streamlit :
 """
 from __future__ import annotations
 
+import base64
 import datetime
 import io
+import uuid
+from pathlib import Path
 from typing import Any
+
+_KANEA_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _fallback_html_report(result: dict[str, Any], module: str) -> bytes:
@@ -89,6 +94,192 @@ def _fallback_html_report(result: dict[str, Any], module: str) -> bytes:
     return html.encode("utf-8")
 
 
+def _qr_code_image(data: str, size_px: int = 120) -> io.BytesIO | None:
+    """Génère un QR code en mémoire (PIL Image → BytesIO PNG)."""
+    try:
+        import qrcode
+        qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_M,
+                           box_size=4, border=2)
+        qr.add_data(data)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+        img = img.resize((size_px, size_px))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        return buf
+    except Exception:
+        return None
+
+
+def _b64_to_image_buffer(b64_str: str, size: tuple[int, int] = (160, 160)) -> io.BytesIO | None:
+    """Convertit un base64 PNG en BytesIO redimensionné."""
+    try:
+        from PIL import Image as PILImage
+        raw = base64.b64decode(b64_str)
+        img = PILImage.open(io.BytesIO(raw)).convert("RGB").resize(size)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        return buf
+    except Exception:
+        return None
+
+
+def _build_malaria_pdf(result: dict[str, Any], patient_id: str | None) -> bytes:
+    """Rapport médical A4 dédié MalariaScan AI avec QR code et carte CAM."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.platypus import (
+        HRFlowable, Image as RLImage, Paragraph, SimpleDocTemplate,
+        Spacer, Table, TableStyle,
+    )
+
+    buf    = io.BytesIO()
+    doc    = SimpleDocTemplate(buf, pagesize=A4,
+                               topMargin=1.8*cm, bottomMargin=2*cm,
+                               leftMargin=2.2*cm, rightMargin=2.2*cm)
+    styles = getSampleStyleSheet()
+    teal   = colors.HexColor("#20B2AA")
+    red    = colors.HexColor("#C0392B")
+    ink    = colors.HexColor("#1A2B3C")
+    muted  = colors.HexColor("#5E7A8A")
+
+    h1 = ParagraphStyle("h1", parent=styles["Heading1"], textColor=teal, fontSize=17, spaceAfter=2)
+    h2 = ParagraphStyle("h2", parent=styles["Heading2"], textColor=ink, fontSize=12,
+                        spaceBefore=12, spaceAfter=3)
+    bd = ParagraphStyle("bd", parent=styles["Normal"], textColor=ink, fontSize=9.5, leading=14)
+    sm = ParagraphStyle("sm", parent=styles["Normal"], textColor=muted, fontSize=8, leading=12)
+
+    now        = datetime.datetime.now()
+    report_id  = f"MAL-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+    pred       = result.get("prediction") or "—"
+    conf       = result.get("confidence") or 0.0
+    probs      = result.get("probabilities") or {}
+    image_name = result.get("input_image") or "—"
+    is_pos     = pred == "Parasitized"
+    pred_label = "POSITIF — Plasmodium détecté" if is_pos else "NÉGATIF — Aucun parasite détecté"
+    reco       = (
+        "Initier immédiatement un traitement antipaludéen (ACT) selon les protocoles nationaux. "
+        "Contrôle parasitologique à J3 recommandé."
+        if is_pos else
+        "Aucun traitement antipaludéen requis. Suivi clinique si la symptomatologie persiste."
+    )
+
+    # QR code encodant les données clés du rapport
+    qr_data = (f"KANEA/MalariaScan | ID:{report_id} | "
+               f"Résultat:{pred} | Confiance:{conf:.1%} | "
+               f"Date:{now.strftime('%Y-%m-%d %H:%M')}")
+    qr_buf  = _qr_code_image(qr_data, size_px=100)
+
+    story = [
+        # En-tête
+        Paragraph("KANEA — MalariaScan AI", h1),
+        Paragraph("Rapport d'analyse parasitologique automatisée", sm),
+        HRFlowable(width="100%", thickness=2, color=teal, spaceAfter=6),
+
+        # Identifiants
+        Paragraph(
+            f"<b>N° rapport :</b> {report_id} &nbsp;&nbsp; "
+            f"<b>Date :</b> {now.strftime('%d/%m/%Y %H:%M')} &nbsp;&nbsp; "
+            f"<b>Image :</b> {image_name}"
+            + (f" &nbsp;&nbsp; <b>Patient :</b> {patient_id}" if patient_id else ""),
+            bd,
+        ),
+        Spacer(1, 0.3*cm),
+    ]
+
+    # Résultat principal + QR code en tableau côte à côte
+    result_text = [
+        Paragraph("1. Résultat de l'analyse", h2),
+        Paragraph(
+            f"<font color='{'#C0392B' if is_pos else '#27AE60'}'><b>{pred_label}</b></font>",
+            ParagraphStyle("res", parent=bd, fontSize=11),
+        ),
+        Spacer(1, 0.15*cm),
+        Paragraph(f"<b>Confiance :</b> {conf:.1%}", bd),
+        Paragraph(f"<b>Probabilité Parasitized :</b> {probs.get('Parasitized', 0):.1%}", bd),
+        Paragraph(f"<b>Probabilité Uninfected :</b> {probs.get('Uninfected', 0):.1%}", bd),
+    ]
+    if qr_buf:
+        qr_img  = RLImage(qr_buf, width=2.5*cm, height=2.5*cm)
+        side_tbl = Table([[result_text, qr_img]], colWidths=[13.5*cm, 2.8*cm])
+        side_tbl.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("ALIGN",  (1, 0), (1, 0),  "CENTER"),
+        ]))
+        story.append(side_tbl)
+    else:
+        story.extend(result_text)
+
+    story.append(Spacer(1, 0.3*cm))
+
+    # Carte CAM
+    expl   = result.get("explainability") or {}
+    cam_b64 = expl.get("heatmap_b64") if isinstance(expl, dict) else None
+    if cam_b64:
+        cam_buf = _b64_to_image_buffer(cam_b64, size=(200, 200))
+        if cam_buf:
+            story += [
+                Paragraph("2. Carte d'activation CAM — Localisation du parasite", h2),
+                Paragraph(
+                    "La carte thermique ci-dessous indique les zones que le modèle a utilisées "
+                    "pour rendre sa décision (rouge = forte activation, bleu = faible activation).",
+                    sm,
+                ),
+                Spacer(1, 0.2*cm),
+                RLImage(cam_buf, width=5*cm, height=5*cm),
+                Spacer(1, 0.2*cm),
+            ]
+
+    # Méthodologie
+    story += [
+        Paragraph("3. Méthodologie", h2),
+        Paragraph(
+            "Analyse par réseau de neurones convolutif ResNet34 entraîné sur le dataset "
+            "NIH Malaria Cell Images (27 560 images, Parasitized vs Uninfected). "
+            "Prétraitement : redimensionnement 224×224 px, normalisation ImageNet. "
+            "Export ONNX Runtime pour inférence CPU sans dépendance GPU.",
+            bd,
+        ),
+        Paragraph(
+            f"<b>Performances du modèle (validation) :</b> "
+            f"Accuracy 92.5% · AUC-ROC 0.969 · Version v2.1",
+            bd,
+        ),
+        Spacer(1, 0.2*cm),
+    ]
+
+    # Recommandation clinique
+    story += [
+        Paragraph("4. Recommandation clinique", h2),
+        Paragraph(reco, bd),
+        Spacer(1, 0.15*cm),
+        Paragraph(
+            "<b>Important :</b> Ce rapport est généré par un système d'aide à la décision. "
+            "Il ne remplace pas le diagnostic d'un biologiste qualifié. "
+            "Toute décision thérapeutique doit être validée par un professionnel de santé.",
+            ParagraphStyle("warn", parent=bd, textColor=red, fontSize=8.5),
+        ),
+    ]
+
+    # Pied de page
+    story += [
+        Spacer(1, 0.4*cm),
+        HRFlowable(width="100%", thickness=0.5, color=muted),
+        Paragraph(
+            f"KANEA v2.1 · MalariaScan AI · Knowledge Anthropology &amp; Neural Engine for Africa · "
+            f"Rapport {report_id} · {now.strftime('%d/%m/%Y')}",
+            sm,
+        ),
+    ]
+
+    doc.build(story)
+    return buf.getvalue()
+
+
 def build_pdf_report(
     result: dict[str, Any],
     module: str = "analyse",
@@ -102,6 +293,11 @@ def build_pdf_report(
         Priorité : PDF (reportlab) → HTML (fallback universel).
     """
     try:
+        # Module malaria : rapport clinique dédié avec QR code + CAM
+        if module == "malaria":
+            pdf_bytes = _build_malaria_pdf(result, patient_id)
+            return pdf_bytes, "application/pdf"
+
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle

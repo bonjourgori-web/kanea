@@ -19,6 +19,60 @@ _MEAN     = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 _STD      = np.array([0.229, 0.224, 0.225],  dtype=np.float32)
 
 
+_MAX_FILE_MB   = 10
+_ALLOWED_EXTS  = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
+_MIN_BRIGHTNESS = 8.0
+_MIN_BLUR_SCORE = 15.0
+
+
+def _validate_image(image_path: str) -> dict[str, Any]:
+    """Validation pré-inférence : taille, format, corruption, flou, image noire."""
+    path = Path(image_path)
+
+    if not path.exists():
+        return {"valid": False, "error": f"Fichier introuvable : {path.name}"}
+
+    size_mb = path.stat().st_size / 1_000_000
+    if size_mb > _MAX_FILE_MB:
+        return {"valid": False, "error": f"Fichier trop volumineux ({size_mb:.1f} MB, max {_MAX_FILE_MB} MB)"}
+
+    if path.suffix.lower() not in _ALLOWED_EXTS:
+        return {"valid": False, "error": f"Format non supporté : {path.suffix}. Acceptés : JPEG, PNG, TIFF"}
+
+    try:
+        img = Image.open(image_path)
+        img.verify()
+    except Exception as exc:
+        return {"valid": False, "error": f"Image corrompue ou illisible : {exc}"}
+
+    try:
+        arr = np.asarray(Image.open(image_path).convert("RGB"), dtype=np.float32)
+    except Exception as exc:
+        return {"valid": False, "error": f"Impossible de décoder l'image : {exc}"}
+
+    mean_brightness = float(arr.mean())
+    if mean_brightness < _MIN_BRIGHTNESS:
+        return {"valid": False, "error": f"Image noire ou vide (luminosité : {mean_brightness:.1f}/255)"}
+
+    # Blur score via variance du gradient (Laplacian approx)
+    gray    = arr.mean(axis=2)
+    padded  = np.pad(gray, 1, mode="edge")
+    lap     = (-4 * gray
+               + padded[:-2, 1:-1] + padded[2:, 1:-1]
+               + padded[1:-1, :-2] + padded[1:-1, 2:])
+    blur_score = float(lap.var())
+    if blur_score < _MIN_BLUR_SCORE:
+        return {"valid": False, "error": f"Image trop floue (score : {blur_score:.1f}, min requis : {_MIN_BLUR_SCORE})"}
+
+    return {
+        "valid":       True,
+        "size_mb":     round(size_mb, 2),
+        "format":      path.suffix.lower(),
+        "brightness":  round(mean_brightness, 1),
+        "blur_score":  round(blur_score, 1),
+    }
+
+
 def _placeholder_response(image_name: str | None, status: str = "scaffold_ready") -> dict[str, Any]:
     return {
         "module":                   "module_1_malaria",
@@ -129,6 +183,14 @@ def predict_malaria(image_path: str | None = None) -> dict[str, Any]:
     image_name = Path(image_path).name if image_path else None
     if not image_path:
         return _placeholder_response(image_name)
+
+    # Validation image avant inférence
+    validation = _validate_image(image_path)
+    if not validation["valid"]:
+        resp = _placeholder_response(image_name, "validation_error")
+        resp["error"]      = validation["error"]
+        resp["validation"] = validation
+        return resp
 
     onnx_path = _resolve_onnx_path()
     if onnx_path is None:

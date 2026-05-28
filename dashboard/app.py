@@ -1696,6 +1696,26 @@ def _render_paludisme() -> None:
 
             with st.expander("🔍 Réponse JSON complète"):
                 st.json(st.session_state.get("malaria_result") or {})
+
+            with st.expander("📊 Performance du modèle MalariaScan AI v2.1"):
+                st.markdown(
+                    """
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+                    <span style="background:#E9F7EF;color:#27AE60;padding:4px 12px;border-radius:999px;font-weight:700;font-size:0.85rem;">Accuracy 92.5%</span>
+                    <span style="background:#EAF4FB;color:#2980B9;padding:4px 12px;border-radius:999px;font-weight:700;font-size:0.85rem;">AUC-ROC 0.969</span>
+                    <span style="background:#FEF9E7;color:#D4AC0D;padding:4px 12px;border-radius:999px;font-weight:700;font-size:0.85rem;">ResNet34 · NIH dataset · v2.1</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                _cm_path  = Path(__file__).resolve().parents[1] / "models" / "deep_learning" / "malaria_confusion_matrix.png"
+                _roc_path = Path(__file__).resolve().parents[1] / "models" / "deep_learning" / "malaria_roc_curve.png"
+                _c1, _c2  = st.columns(2)
+                if _cm_path.exists():
+                    _c1.image(str(_cm_path), caption="Matrice de confusion (validation)", use_container_width=True)
+                if _roc_path.exists():
+                    _c2.image(str(_roc_path), caption="Courbe ROC — AUC = 0.969", use_container_width=True)
+
         else:
             st.markdown(
                 """
