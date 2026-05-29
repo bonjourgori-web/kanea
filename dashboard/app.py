@@ -1877,7 +1877,7 @@ def _render_paludisme() -> None:
         _pred_norm = (_pred or "").lower()
 
         # Afficher l'erreur si l'inférence a échoué
-        _mal_result = st.session_state.get("malaria_result", {})
+        _mal_result = st.session_state.get("malaria_result") or {}
         if _pred is None and _mal_result.get("status") == "inference_error":
             st.error(
                 f"❌ Erreur d'analyse — {_mal_result.get('error', 'modèle ONNX non disponible')}",
