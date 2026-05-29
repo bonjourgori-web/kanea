@@ -206,11 +206,95 @@ def predict_breast_cancer_from_path(request: BreastCancerPathInput) -> dict:
 
 @app.post("/predict/breast-cancer/upload")
 async def predict_breast_cancer_from_upload(file: UploadFile = File(...)) -> dict:
+    """Analyse complète BreastCancer AI v3.0 — grade, TNM, ER/PR/HER2, Ki67, CAM."""
     suffix = Path(file.filename or "upload.png").suffix or ".png"
     with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(await file.read())
         temp_path = tmp.name
     return predict_breast_cancer(temp_path)
+
+
+@app.post("/predict/breast-cancer/stage")
+async def predict_bc_stage(file: UploadFile = File(...)) -> dict:
+    """Estimation stade TNM et grade tumoral."""
+    suffix = Path(file.filename or "upload.png").suffix or ".png"
+    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        temp_path = tmp.name
+    result = predict_breast_cancer(temp_path)
+    return {
+        "request_id":    result.get("request_id"),
+        "prediction":    result.get("prediction"),
+        "confidence":    result.get("confidence"),
+        "tumor_grade":   result.get("tumor_grade"),
+        "tnm_stage":     result.get("tnm_stage"),
+        "tumor_subtype": result.get("tumor_subtype"),
+        "clinical_safety": result.get("clinical_safety"),
+        "processing_ms": result.get("processing_ms"),
+        "status":        result.get("status"),
+    }
+
+
+@app.post("/predict/breast-cancer/receptors")
+async def predict_bc_receptors(file: UploadFile = File(...)) -> dict:
+    """Prédiction statut récepteurs ER/PR/HER2 et phénotype moléculaire."""
+    suffix = Path(file.filename or "upload.png").suffix or ".png"
+    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        temp_path = tmp.name
+    result = predict_breast_cancer(temp_path)
+    return {
+        "request_id":       result.get("request_id"),
+        "prediction":       result.get("prediction"),
+        "confidence":       result.get("confidence"),
+        "receptor_status":  result.get("receptor_status"),
+        "clinical_safety":  result.get("clinical_safety"),
+        "processing_ms":    result.get("processing_ms"),
+        "status":           result.get("status"),
+    }
+
+
+@app.post("/predict/breast-cancer/ki67")
+async def predict_bc_ki67(file: UploadFile = File(...)) -> dict:
+    """Estimation index Ki67 de prolifération tumorale."""
+    suffix = Path(file.filename or "upload.png").suffix or ".png"
+    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        temp_path = tmp.name
+    result = predict_breast_cancer(temp_path)
+    return {
+        "request_id":      result.get("request_id"),
+        "prediction":      result.get("prediction"),
+        "confidence":      result.get("confidence"),
+        "ki67":            result.get("ki67"),
+        "tumor_grade":     result.get("tumor_grade"),
+        "clinical_safety": result.get("clinical_safety"),
+        "processing_ms":   result.get("processing_ms"),
+        "status":          result.get("status"),
+    }
+
+
+@app.post("/breast-cancer/report")
+async def generate_bc_report(file: UploadFile = File(...)) -> dict:
+    """Analyse complète + rapport PDF médical BreastCancer AI (base64)."""
+    import base64
+    suffix = Path(file.filename or "upload.png").suffix or ".png"
+    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        temp_path = tmp.name
+    result = predict_breast_cancer(temp_path)
+    try:
+        from dashboard.export_pdf import build_pdf_report
+        pdf_bytes, _ = build_pdf_report(result, module="breast_cancer")
+        pdf_b64 = base64.b64encode(pdf_bytes).decode("ascii")
+    except Exception as exc:
+        pdf_b64 = None
+        log.warning("BreastCancer PDF generation failed: %s", exc)
+    return {
+        **{k: v for k, v in result.items() if k not in ("explainability",)},
+        "pdf_report_b64": pdf_b64,
+        "pdf_available":  pdf_b64 is not None,
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

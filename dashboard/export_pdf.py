@@ -126,6 +126,188 @@ def _b64_to_image_buffer(b64_str: str, size: tuple[int, int] = (160, 160)) -> io
         return None
 
 
+def _build_breast_cancer_pdf(result: dict[str, Any], patient_id: str | None) -> bytes:
+    """Rapport médical A4 BreastCancer AI v3.0 — EfficientNet-B0 + CAM + grade/TNM/ER/Ki67 + QR code."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.platypus import (
+        HRFlowable, Image as RLImage, Paragraph, SimpleDocTemplate,
+        Spacer, Table, TableStyle,
+    )
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            topMargin=1.8*cm, bottomMargin=2*cm,
+                            leftMargin=2.2*cm, rightMargin=2.2*cm)
+    styles  = getSampleStyleSheet()
+    teal    = colors.HexColor("#20B2AA")
+    red_c   = colors.HexColor("#C0392B")
+    ink     = colors.HexColor("#1A2B3C")
+    muted   = colors.HexColor("#5E7A8A")
+
+    h1 = ParagraphStyle("h1", parent=styles["Heading1"], textColor=teal, fontSize=17, spaceAfter=2)
+    h2 = ParagraphStyle("h2", parent=styles["Heading2"], textColor=ink, fontSize=12,
+                        spaceBefore=12, spaceAfter=3)
+    bd = ParagraphStyle("bd", parent=styles["Normal"], textColor=ink, fontSize=9.5, leading=14)
+    sm = ParagraphStyle("sm", parent=styles["Normal"], textColor=muted, fontSize=8, leading=12)
+
+    now       = datetime.datetime.now()
+    report_id = f"BC-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+    pred      = result.get("prediction") or "—"
+    conf      = result.get("confidence") or 0.0
+    probs     = result.get("probabilities") or {}
+    img_name  = result.get("input_image") or "—"
+    grade     = result.get("tumor_grade") or {}
+    tnm       = result.get("tnm_stage") or {}
+    recep     = result.get("receptor_status") or {}
+    ki67      = result.get("ki67") or {}
+    subtyp    = result.get("tumor_subtype") or {}
+    safety    = result.get("clinical_safety") or {}
+    reco      = result.get("recommendations") or {}
+
+    pred_colors = {"Normal": "#27AE60", "Benign": "#F39C12", "Malignant": "#C0392B"}
+    pred_hex    = pred_colors.get(pred, "#5E7A8A")
+    urgency     = reco.get("urgency", "—")
+
+    qr_data = (f"KANEA/BreastCancerAI | ID:{report_id} | "
+               f"Résultat:{pred} | Conf:{conf:.1%} | "
+               f"Stage:{tnm.get('clinical_stage','—')} | "
+               f"Date:{now.strftime('%Y-%m-%d %H:%M')}")
+    qr_buf = _qr_code_image(qr_data, size_px=100)
+
+    story = [
+        Paragraph("KANEA — BreastCancer AI", h1),
+        Paragraph("Rapport d'analyse oncologique automatisée — EfficientNet-B0", sm),
+        HRFlowable(width="100%", thickness=2, color=teal, spaceAfter=6),
+        Paragraph(
+            f"<b>N° rapport :</b> {report_id} &nbsp;&nbsp; "
+            f"<b>Date :</b> {now.strftime('%d/%m/%Y %H:%M')} &nbsp;&nbsp; "
+            f"<b>Image :</b> {img_name}"
+            + (f" &nbsp;&nbsp; <b>Patient :</b> {patient_id}" if patient_id else ""),
+            bd,
+        ),
+        Spacer(1, 0.3*cm),
+    ]
+
+    # Résultat principal + QR
+    pred_label = {"Normal": "NORMAL — Aucun signe de malignité",
+                  "Benign": "BÉNIN — Lésion non cancéreuse",
+                  "Malignant": "MALIN — Signe potentiel de cancer"}.get(pred, pred)
+    result_txt = [
+        Paragraph("1. Résultat de l'analyse", h2),
+        Paragraph(f"<font color='{pred_hex}'><b>{pred_label}</b></font>",
+                  ParagraphStyle("res", parent=bd, fontSize=11)),
+        Spacer(1, 0.1*cm),
+        Paragraph(f"<b>Confiance :</b> {conf:.1%}  &nbsp;|&nbsp; <b>Urgence :</b> <font color='{pred_hex}'>{urgency}</font>", bd),
+        Paragraph(f"<b>Probabilités :</b> Normal {probs.get('Normal',0):.1%}  "
+                  f"| Bénin {probs.get('Benign',0):.1%}  "
+                  f"| Malin {probs.get('Malignant',0):.1%}", bd),
+    ]
+    if qr_buf:
+        qr_img  = RLImage(qr_buf, width=2.5*cm, height=2.5*cm)
+        side    = Table([[result_txt, qr_img]], colWidths=[13.5*cm, 2.8*cm])
+        side.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"),("ALIGN",(1,0),(1,0),"CENTER")]))
+        story.append(side)
+    else:
+        story.extend(result_txt)
+    story.append(Spacer(1, 0.3*cm))
+
+    # Analyses cliniques
+    if pred == "Malignant" and (grade or tnm or recep or ki67):
+        story.append(Paragraph("2. Analyses cliniques avancées", h2))
+        clinical_rows = [["Paramètre", "Valeur", "Interprétation clinique"]]
+
+        if grade:
+            g = grade.get("dominant_grade", "—")
+            clinical_rows.append(["Grade tumoral", g, grade.get("clinical_note", "—")])
+        if tnm:
+            stage_str = f"{tnm.get('T','?')} {tnm.get('N','?')} {tnm.get('M','?')} — {tnm.get('clinical_stage','—')}"
+            clinical_rows.append(["Stade TNM", stage_str, tnm.get("stage_note", "—")])
+        if subtyp:
+            clinical_rows.append(["Sous-type", subtyp.get("dominant_subtype","—"),
+                                   subtyp.get("epidemiological_note","—")])
+        if recep:
+            r_str = (f"ER {recep.get('ER_percentage',0)}% ({recep.get('ER_status','?')})  "
+                     f"PR {recep.get('PR_percentage',0)}% ({recep.get('PR_status','?')})  "
+                     f"HER2 {recep.get('HER2_status','?')}")
+            clinical_rows.append(["Récepteurs ER/PR/HER2", r_str,
+                                   f"Phénotype : {recep.get('phenotype','—')}"])
+        if ki67:
+            clinical_rows.append(["Ki67 (prolifération)", f"{ki67.get('percentage',0)}%",
+                                   ki67.get("interpretation","—")])
+
+        if len(clinical_rows) > 1:
+            ct = Table(clinical_rows, colWidths=[4*cm, 5*cm, 7.2*cm])
+            ct.setStyle(TableStyle([
+                ("BACKGROUND",    (0,0),(-1,0), teal),
+                ("TEXTCOLOR",     (0,0),(-1,0), colors.white),
+                ("FONTNAME",      (0,0),(-1,0), "Helvetica-Bold"),
+                ("FONTSIZE",      (0,0),(-1,-1), 8),
+                ("ROWBACKGROUNDS",(0,1),(-1,-1), [colors.white, colors.HexColor("#F7F9FC")]),
+                ("GRID",          (0,0),(-1,-1), 0.4, colors.HexColor("#DDE8EE")),
+                ("TOPPADDING",    (0,0),(-1,-1), 4),
+                ("BOTTOMPADDING", (0,0),(-1,-1), 4),
+                ("VALIGN",        (0,0),(-1,-1), "TOP"),
+            ]))
+            story += [ct, Spacer(1, 0.15*cm)]
+            story.append(Paragraph(
+                "<i>* Grade, TNM, récepteurs, Ki67 : estimations algorithmiques (priors SEER + "
+                "analyse CAM). Confirmation par biopsie et IHC obligatoire.</i>",
+                ParagraphStyle("note", parent=sm, textColor=muted, fontSize=7.5),
+            ))
+            story.append(Spacer(1, 0.2*cm))
+
+    # Alerte sécurité
+    if safety.get("level") in ("critical", "warning", "low_confidence"):
+        story.append(Paragraph(
+            f"<b>Alerte :</b> {safety.get('message','')}",
+            ParagraphStyle("alert", parent=bd, textColor=red_c, fontSize=9),
+        ))
+        story.append(Spacer(1, 0.15*cm))
+
+    # CAM
+    expl    = result.get("explainability") or {}
+    cam_b64 = expl.get("heatmap_b64") if isinstance(expl, dict) else None
+    sec_num = 3 if pred == "Malignant" else 2
+    if cam_b64:
+        cam_buf = _b64_to_image_buffer(cam_b64, size=(200, 200))
+        if cam_buf:
+            story += [
+                Paragraph(f"{sec_num}. Carte d'activation CAM — Zones suspectes", h2),
+                Paragraph("Rouge = forte activation (zone suspecte), Bleu = faible activation.", sm),
+                Spacer(1, 0.2*cm),
+                RLImage(cam_buf, width=5*cm, height=5*cm),
+                Spacer(1, 0.2*cm),
+            ]
+            sec_num += 1
+
+    # Recommandations
+    actions = reco.get("actions") or []
+    if actions:
+        story.append(Paragraph(f"{sec_num}. Recommandations cliniques", h2))
+        story.append(Paragraph(f"<b>Urgence :</b> <font color='{pred_hex}'>{urgency}</font>  "
+                                f"&nbsp;|&nbsp;  <b>Suivi :</b> {reco.get('follow_up','—')}", bd))
+        story.append(Spacer(1, 0.1*cm))
+        for i, action in enumerate(actions, 1):
+            story.append(Paragraph(f"{i}. {action}", bd))
+
+    # Pied de page
+    story += [
+        Spacer(1, 0.4*cm),
+        HRFlowable(width="100%", thickness=0.5, color=muted),
+        Paragraph(
+            f"KANEA v3.0 · BreastCancer AI · EfficientNet-B0 · "
+            f"Outil d'aide à la décision — validation médicale obligatoire · "
+            f"Rapport {report_id} · {now.strftime('%d/%m/%Y')}",
+            sm,
+        ),
+    ]
+    doc.build(story)
+    return buf.getvalue()
+
+
 def _build_nutrition_pdf(result: dict[str, Any], patient_id: str | None) -> bytes:
     """Rapport médical A4 NutriTrack AI — SHAP + Z-scores + recommandations + QR code."""
     from reportlab.lib import colors
@@ -605,6 +787,11 @@ def build_pdf_report(
         # Module nutrition : rapport NutriTrack AI avec SHAP + recommandations
         if module in ("nutrition", "biometry"):
             pdf_bytes = _build_nutrition_pdf(result, patient_id)
+            return pdf_bytes, "application/pdf"
+
+        # Module cancer du sein : rapport BreastCancer AI
+        if module in ("breast_cancer", "cancer_sein"):
+            pdf_bytes = _build_breast_cancer_pdf(result, patient_id)
             return pdf_bytes, "application/pdf"
 
         from reportlab.lib import colors

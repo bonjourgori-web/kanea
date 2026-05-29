@@ -2729,59 +2729,165 @@ def _render_breast_cancer() -> None:
         st.markdown("<div class='section-card'><div class='section-title'>📤 Analyser une mammographie</div>", unsafe_allow_html=True)
         uploaded = st.file_uploader("Importer une mammographie (PNG, JPG)", type=["png", "jpg", "jpeg"], key="bc_upload")
 
+        # Session state persistance
+        for _k in ("bc_result","bc_pred","bc_conf","bc_gradcam","bc_pdf_bytes","bc_img_name"):
+            if _k not in st.session_state:
+                st.session_state[_k] = None
+
         if uploaded:
             st.image(uploaded, caption=uploaded.name, use_container_width=True)
 
             if st.button("🩺 Analyser la mammographie", use_container_width=True, key="btn_bc"):
-                with st.spinner("🧠 Classification EfficientNet-B0 en cours..."):
-                    time.sleep(0.8)
+                with st.spinner("🧠 Classification EfficientNet-B0 + analyses cliniques..."):
                     try:
                         suffix = Path(uploaded.name).suffix or ".png"
                         with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                             tmp.write(uploaded.getbuffer())
                             temp_path = tmp.name
-                        result = multibio_predict(breast_cancer_image_path=temp_path)
+                        result    = multibio_predict(breast_cancer_image_path=temp_path)
+                        pred_data = result.get("results", {}).get("module_4_breast_cancer", {})
+                        st.session_state["bc_result"]   = pred_data
+                        st.session_state["bc_pred"]     = pred_data.get("prediction")
+                        st.session_state["bc_conf"]     = pred_data.get("confidence")
+                        st.session_state["bc_gradcam"]  = (pred_data.get("explainability") or {}).get("heatmap_b64")
+                        st.session_state["bc_img_name"] = uploaded.name
+                        # Génération PDF
+                        try:
+                            _pdf_data, _mime = build_pdf_report(pred_data, module="breast_cancer")
+                            st.session_state["bc_pdf_bytes"] = _pdf_data
+                        except Exception:
+                            st.session_state["bc_pdf_bytes"] = None
                     except Exception as e:
                         st.error(f"Erreur lors de l'analyse : {e}")
-                        result = None
 
-                if result:
-                    pred_data  = result.get("results", {}).get("module_4_breast_cancer", {})
-                    prediction = pred_data.get("prediction")
-                    confidence = pred_data.get("confidence")
-                    expl       = pred_data.get("explainability", {})
-                    gradcam    = expl.get("heatmap_b64")
+        # Affichage des résultats (persistants)
+        _bc_pred  = st.session_state.get("bc_pred")
+        _bc_conf  = st.session_state.get("bc_conf")
+        _bc_gc    = st.session_state.get("bc_gradcam")
+        _bc_res   = st.session_state.get("bc_result") or {}
 
-                    if prediction and prediction in _BC_INFO:
-                        icon, color, bg, label, reco = _BC_INFO[prediction]
-                        st.markdown(
-                            f"""<div style='background:{bg};border-left:5px solid {color};
-                            border-radius:0 14px 14px 0;padding:1.2rem 1.4rem;margin:0.8rem 0;'>
-                            <div style='font-size:1.3rem;font-weight:800;color:{color};'>
-                                {icon} {label}
-                            </div>
-                            {"<div style='font-size:0.9rem;color:#5E7A8A;margin-top:0.3rem;'>Confiance : <b>" + f"{confidence:.1%}" + "</b></div>" if confidence else ""}
-                            <div style='font-size:0.88rem;margin-top:0.5rem;color:#1A2B3C;'>
-                                💡 <strong>À faire :</strong> {reco}
-                            </div></div>""",
-                            unsafe_allow_html=True,
-                        )
+        if _bc_pred and _bc_pred in _BC_INFO:
+            icon, color, bg, label, _reco_txt = _BC_INFO[_bc_pred]
+            st.markdown(
+                f"""<div style='background:{bg};border-left:5px solid {color};
+                border-radius:0 14px 14px 0;padding:1.2rem 1.4rem;margin:0.8rem 0;'>
+                <div style='font-size:1.3rem;font-weight:800;color:{color};'>{icon} {label}</div>
+                {"<div style='font-size:0.9rem;color:#5E7A8A;margin-top:0.3rem;'>Confiance : <b>" + f'{_bc_conf:.1%}' + "</b></div>" if _bc_conf else ""}
+                </div>""",
+                unsafe_allow_html=True,
+            )
 
-                        if gradcam:
-                            st.markdown("**🔥 Carte Grad-CAM — zones d'activation**")
-                            st.markdown(
-                                f'<img src="data:image/png;base64,{gradcam}" '
-                                'style="width:100%;border-radius:12px;border:1px solid #DDE8EE;" '
-                                'alt="Grad-CAM heatmap"/>',
-                                unsafe_allow_html=True,
-                            )
-                    else:
-                        st.info("ℹ️ Modèle non encore entraîné — résultat placeholder. "
-                                "Lancer `python scripts/train_breast_cancer_model.py`")
+            # CAM heatmap
+            if _bc_gc:
+                st.markdown("**🔥 Carte CAM — zones suspectes**")
+                st.markdown(
+                    f'<img src="data:image/png;base64,{_bc_gc}" '
+                    'style="width:100%;border-radius:12px;border:1px solid #DDE8EE;" '
+                    'alt="CAM heatmap"/>',
+                    unsafe_allow_html=True,
+                )
 
-                    _download_report(pred_data, "breast_cancer", "dl_bc")
-                    with st.expander("Réponse JSON complète"):
-                        st.json(result)
+            # Analyses cliniques avancées (si Malin)
+            _grade  = _bc_res.get("tumor_grade") or {}
+            _tnm    = _bc_res.get("tnm_stage") or {}
+            _recep  = _bc_res.get("receptor_status") or {}
+            _ki67   = _bc_res.get("ki67") or {}
+            _safety = _bc_res.get("clinical_safety") or {}
+
+            if _bc_pred == "Malignant" and (_grade or _tnm):
+                st.markdown("<div style='height:.4rem'></div>", unsafe_allow_html=True)
+                _cc1, _cc2, _cc3 = st.columns(3)
+                if _grade:
+                    _g = _grade.get("dominant_grade","—")
+                    _g_c = {"Grade 1":"#27AE60","Grade 2":"#F39C12","Grade 3":"#E74C3C"}.get(_g,"#5E7A8A")
+                    _cc1.markdown(f"""<div style="background:#F7F9FC;border-radius:10px;padding:12px;
+                        border-left:4px solid {_g_c};">
+                        <div style="font-size:0.7rem;color:#5E7A8A;font-weight:600;text-transform:uppercase;">Grade tumoral</div>
+                        <div style="font-size:1.2rem;font-weight:700;color:{_g_c};">{_g}</div>
+                        <div style="font-size:0.72rem;color:#5E7A8A;">{_grade.get('clinical_note','')[:50]}</div>
+                        </div>""", unsafe_allow_html=True)
+                if _tnm:
+                    _cc2.markdown(f"""<div style="background:#F7F9FC;border-radius:10px;padding:12px;
+                        border-left:4px solid #8E44AD;">
+                        <div style="font-size:0.7rem;color:#5E7A8A;font-weight:600;text-transform:uppercase;">Stade TNM</div>
+                        <div style="font-size:1.1rem;font-weight:700;color:#8E44AD;">{_tnm.get('clinical_stage','—')}</div>
+                        <div style="font-size:0.72rem;color:#5E7A8A;">{_tnm.get('T','?')} {_tnm.get('N','?')} {_tnm.get('M','?')}</div>
+                        </div>""", unsafe_allow_html=True)
+                if _ki67:
+                    _ki_pct = _ki67.get("percentage",0)
+                    _ki_c = "#E74C3C" if _ki_pct>30 else ("#F39C12" if _ki_pct>14 else "#27AE60")
+                    _cc3.markdown(f"""<div style="background:#F7F9FC;border-radius:10px;padding:12px;
+                        border-left:4px solid {_ki_c};">
+                        <div style="font-size:0.7rem;color:#5E7A8A;font-weight:600;text-transform:uppercase;">Ki67 Prolifération</div>
+                        <div style="font-size:1.4rem;font-weight:700;color:{_ki_c};">{_ki_pct}%</div>
+                        <div style="font-size:0.72rem;color:{_ki_c};">{'Haut' if _ki_pct>30 else 'Interméd.' if _ki_pct>14 else 'Faible'}</div>
+                        </div>""", unsafe_allow_html=True)
+
+                # Récepteurs
+                if _recep:
+                    st.markdown(
+                        f"""<div style="background:#F7F9FC;border-radius:10px;padding:10px 14px;
+                        border-left:4px solid #2980B9;margin-top:8px;">
+                        <span style="font-size:0.7rem;color:#5E7A8A;font-weight:600;text-transform:uppercase;">Récepteurs ER/PR/HER2 (estimation)</span><br>
+                        <span style="font-size:0.9rem;font-weight:600;color:#1A2B3C;">
+                        ER {_recep.get('ER_percentage',0)}% ({_recep.get('ER_status','?')}) &nbsp;·&nbsp;
+                        PR {_recep.get('PR_percentage',0)}% ({_recep.get('PR_status','?')}) &nbsp;·&nbsp;
+                        HER2 {_recep.get('HER2_status','?')} &nbsp;·&nbsp;
+                        Phénotype : <b>{_recep.get('phenotype','—')}</b></span>
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
+
+            # Alerte sécurité
+            if _safety.get("level") in ("critical","warning","low_confidence"):
+                _lvl_icon = "🚨" if _safety.get("level")=="critical" else "⚠️"
+                st.warning(f"{_lvl_icon} {_safety.get('message','')}", icon="🏥")
+
+            # Recommandations
+            _reco_d = _bc_res.get("recommendations") or {}
+            _actions = _reco_d.get("actions") or []
+            if _actions:
+                _urg    = _reco_d.get("urgency","—")
+                _urg_c  = {"CRITIQUE":"#C0392B","MODÉRÉE":"#F39C12","FAIBLE":"#27AE60"}.get(_urg,"#5E7A8A")
+                st.markdown(
+                    f"""<div style="background:#F7F9FC;border-radius:10px;padding:12px 16px;
+                    border-left:4px solid {_urg_c};margin-top:8px;">
+                    <div style="font-size:0.72rem;color:#5E7A8A;font-weight:600;text-transform:uppercase;margin-bottom:6px;">
+                    Recommandations — Urgence : <span style="color:{_urg_c};font-weight:700;">{_urg}</span>
+                    · Suivi : <b>{_reco_d.get('follow_up','—')}</b></div>
+                    {''.join(f"<div style='font-size:0.84rem;color:#1A2B3C;padding:2px 0;'>• {a}</div>" for a in _actions[:4])}
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+            # PDF + performance
+            st.markdown("<div style='height:.5rem'></div>", unsafe_allow_html=True)
+            _bc_pdf = st.session_state.get("bc_pdf_bytes")
+            if _bc_pdf:
+                st.download_button(
+                    "📥 Télécharger le rapport PDF",
+                    data=_bc_pdf,
+                    file_name=f"BreastCancer_AI_{st.session_state.get('bc_img_name','rapport')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="dl_bc_pdf",
+                )
+
+            with st.expander("📊 Performance du modèle BreastCancer AI v3.0"):
+                _bc_mdl = Path(__file__).resolve().parents[1] / "models" / "deep_learning"
+                _bcc1, _bcc2 = st.columns(2)
+                _bcc3, _bcc4 = st.columns(2)
+                if (_bc_mdl/"bc_confusion_matrix.png").exists():
+                    _bcc1.image(str(_bc_mdl/"bc_confusion_matrix.png"), caption="Matrice de confusion", use_container_width=True)
+                if (_bc_mdl/"bc_roc_curve.png").exists():
+                    _bcc2.image(str(_bc_mdl/"bc_roc_curve.png"), caption="Courbe ROC", use_container_width=True)
+                if (_bc_mdl/"bc_receptor_distribution.png").exists():
+                    _bcc3.image(str(_bc_mdl/"bc_receptor_distribution.png"), caption="Récepteurs & Sous-types", use_container_width=True)
+                if (_bc_mdl/"bc_ki67_chart.png").exists():
+                    _bcc4.image(str(_bc_mdl/"bc_ki67_chart.png"), caption="Ki67 par grade", use_container_width=True)
+
+            with st.expander("Réponse JSON complète"):
+                st.json(_bc_res)
         else:
             st.markdown(
                 """
