@@ -126,6 +126,208 @@ def _b64_to_image_buffer(b64_str: str, size: tuple[int, int] = (160, 160)) -> io
         return None
 
 
+def _build_nutrition_pdf(result: dict[str, Any], patient_id: str | None) -> bytes:
+    """Rapport médical A4 NutriTrack AI — SHAP + Z-scores + recommandations + QR code."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.platypus import (
+        HRFlowable, Image as RLImage, Paragraph, SimpleDocTemplate,
+        Spacer, Table, TableStyle,
+    )
+
+    buf    = io.BytesIO()
+    doc    = SimpleDocTemplate(buf, pagesize=A4,
+                               topMargin=1.8*cm, bottomMargin=2*cm,
+                               leftMargin=2.2*cm, rightMargin=2.2*cm)
+    styles = getSampleStyleSheet()
+    teal   = colors.HexColor("#20B2AA")
+    ink    = colors.HexColor("#1A2B3C")
+    muted  = colors.HexColor("#5E7A8A")
+
+    h1 = ParagraphStyle("h1", parent=styles["Heading1"], textColor=teal, fontSize=17, spaceAfter=2)
+    h2 = ParagraphStyle("h2", parent=styles["Heading2"], textColor=ink, fontSize=12,
+                        spaceBefore=12, spaceAfter=3)
+    bd = ParagraphStyle("bd", parent=styles["Normal"], textColor=ink, fontSize=9.5, leading=14)
+    sm = ParagraphStyle("sm", parent=styles["Normal"], textColor=muted, fontSize=8, leading=12)
+
+    now       = datetime.datetime.now()
+    report_id = f"NUT-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+    pred      = result.get("prediction") or "—"
+    conf      = result.get("confidence") or 0.0
+    risk      = result.get("risk_level") or "—"
+    inputs    = result.get("inputs_summary") or {}
+    derived   = result.get("derived_features") or {}
+    reco      = result.get("recommendations") or {}
+
+    # Couleur urgence
+    urgency_color_map = {
+        "CRITIQUE": "#C0392B", "ÉLEVÉE": "#E67E22",
+        "MODÉRÉE": "#F39C12", "FAIBLE": "#27AE60",
+    }
+    urgency      = reco.get("urgency", "—")
+    urge_hex   = urgency_color_map.get(urgency, "#5E7A8A")
+    pred_label = reco.get("label_fr", pred)
+
+    # QR code
+    qr_data = (f"KANEA/NutriTrack | ID:{report_id} | "
+               f"Statut:{pred} | Risque:{risk} | Conf:{conf:.1%} | "
+               f"Date:{now.strftime('%Y-%m-%d %H:%M')}")
+    qr_buf = _qr_code_image(qr_data, size_px=100)
+
+    story = [
+        Paragraph("KANEA — NutriTrack AI", h1),
+        Paragraph("Rapport d'analyse nutritionnelle automatisée", sm),
+        HRFlowable(width="100%", thickness=2, color=teal, spaceAfter=6),
+        Paragraph(
+            f"<b>N° rapport :</b> {report_id} &nbsp;&nbsp; "
+            f"<b>Date :</b> {now.strftime('%d/%m/%Y %H:%M')}"
+            + (f" &nbsp;&nbsp; <b>Patient :</b> {patient_id}" if patient_id else ""),
+            bd,
+        ),
+        Spacer(1, 0.3*cm),
+    ]
+
+    # Résultat + QR code
+    result_txt = [
+        Paragraph("1. Statut nutritionnel", h2),
+        Paragraph(
+            f"<font color='{urge_hex}'><b>{pred_label}</b></font>",
+            ParagraphStyle("res", parent=bd, fontSize=11),
+        ),
+        Spacer(1, 0.1*cm),
+        Paragraph(f"<b>Confiance :</b> {conf:.1%}  &nbsp;|&nbsp; <b>Niveau de risque :</b> {risk.upper()}", bd),
+        Paragraph(f"<b>Urgence :</b> <font color='{urge_hex}'>{urgency}</font>", bd),
+    ]
+    if qr_buf:
+        qr_img = RLImage(qr_buf, width=2.5*cm, height=2.5*cm)
+        side   = Table([[result_txt, qr_img]], colWidths=[13.5*cm, 2.8*cm])
+        side.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("ALIGN",  (1, 0), (1, 0),  "CENTER"),
+        ]))
+        story.append(side)
+    else:
+        story.extend(result_txt)
+    story.append(Spacer(1, 0.3*cm))
+
+    # Données anthropométriques
+    story.append(Paragraph("2. Données anthropométriques", h2))
+    anthr_rows = [["Mesure", "Valeur", "Interprétation OMS"]]
+
+    bmi = derived.get("bmi")
+    waz = derived.get("waz")
+    haz = derived.get("haz")
+    whz = derived.get("whz")
+    rs  = derived.get("nutrition_risk_score")
+
+    anthr_data = [
+        ("Âge",     f"{inputs.get('age_months', '—')} mois",  ""),
+        ("Poids",   f"{inputs.get('weight_kg', '—')} kg",      ""),
+        ("Taille",  f"{inputs.get('height_cm', '—')} cm",      ""),
+        ("MUAC",    f"{inputs.get('muac_cm', '—')} cm",
+            "< 11.5 cm = MAS | 11.5–12.5 cm = MAM" if inputs.get("muac_cm") else ""),
+        ("IMC",     f"{bmi:.1f} kg/m²" if bmi else "—",
+            "Normal: 18.5–25 | Maigreur: < 18.5 | Obésité: > 30"),
+        ("WAZ",     f"{waz:.2f}" if waz else "—",    "< -3 = MAS | -3 à -2 = MAM"),
+        ("HAZ",     f"{haz:.2f}" if haz else "—",    "< -3 = Retard sévère | -3 à -2 = Retard"),
+        ("WHZ",     f"{whz:.2f}" if whz else "—",    "< -3 = MAS | -3 à -2 = MAM"),
+        ("Score risque", f"{rs}/10" if rs is not None else "—",
+            "0–2 = Faible | 3–5 = Modéré | 6–8 = Élevé | 9–10 = Critique"),
+    ]
+    for label, val, interp in anthr_data:
+        anthr_rows.append([label, val, interp])
+
+    at = Table(anthr_rows, colWidths=[4*cm, 3.5*cm, 8.7*cm])
+    at.setStyle(TableStyle([
+        ("BACKGROUND",    (0, 0), (-1, 0), teal),
+        ("TEXTCOLOR",     (0, 0), (-1, 0), colors.white),
+        ("FONTNAME",      (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE",      (0, 0), (-1, -1), 8.5),
+        ("ROWBACKGROUNDS",(0, 1), (-1, -1), [colors.white, colors.HexColor("#F7F9FC")]),
+        ("GRID",          (0, 0), (-1, -1), 0.4, colors.HexColor("#DDE8EE")),
+        ("TOPPADDING",    (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+    ]))
+    story += [at, Spacer(1, 0.3*cm)]
+
+    # SHAP top features
+    expl       = result.get("explainability") or {}
+    top_feats  = expl.get("top_features") or []
+    shap_img_b64 = expl.get("shap_img_b64")
+
+    if top_feats or shap_img_b64:
+        story.append(Paragraph("3. Facteurs prédictifs (SHAP)", h2))
+        story.append(Paragraph(
+            f"Méthode : {expl.get('method', 'feature_importance')} — "
+            f"Variables ayant le plus influencé la prédiction :",
+            sm,
+        ))
+        story.append(Spacer(1, 0.15*cm))
+
+        if shap_img_b64:
+            shap_buf = _b64_to_image_buffer(shap_img_b64, size=(320, 190))
+            if shap_buf:
+                story.append(RLImage(shap_buf, width=8*cm, height=4.8*cm))
+        elif top_feats:
+            feat_rows = [["Variable", "Importance", "Direction"]]
+            for f in top_feats[:6]:
+                feat_rows.append([
+                    f["feature"],
+                    f"{f['importance']:.4f}",
+                    "Augmente risque" if f.get("direction") == "+" else "Réduit risque",
+                ])
+            ft = Table(feat_rows, colWidths=[5*cm, 3.5*cm, 7.7*cm])
+            ft.setStyle(TableStyle([
+                ("BACKGROUND",    (0, 0), (-1, 0), teal),
+                ("TEXTCOLOR",     (0, 0), (-1, 0), colors.white),
+                ("FONTNAME",      (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE",      (0, 0), (-1, -1), 8.5),
+                ("ROWBACKGROUNDS",(0, 1), (-1, -1), [colors.white, colors.HexColor("#F7F9FC")]),
+                ("GRID",          (0, 0), (-1, -1), 0.4, colors.HexColor("#DDE8EE")),
+                ("TOPPADDING",    (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]))
+            story.append(ft)
+        story.append(Spacer(1, 0.2*cm))
+
+    # Recommandations cliniques
+    actions = reco.get("actions") or []
+    if actions:
+        story.append(Paragraph("4. Recommandations cliniques", h2))
+        story.append(Paragraph(
+            f"<b>Urgence :</b> <font color='{urge_hex}'>{urgency}</font>  &nbsp;|&nbsp;  "
+            f"<b>Suivi :</b> {reco.get('monitoring', '—')}",
+            bd,
+        ))
+        story.append(Spacer(1, 0.1*cm))
+        for i, action in enumerate(actions, 1):
+            story.append(Paragraph(f"{i}. {action}", bd))
+        story.append(Spacer(1, 0.1*cm))
+        if reco.get("diet_advice"):
+            story.append(Paragraph(f"<b>Conseil nutritionnel :</b> {reco['diet_advice']}", bd))
+        story.append(Paragraph(
+            f"<b>Seuil OMS de référence :</b> {reco.get('oms_threshold', '—')}",
+            sm,
+        ))
+
+    # Pied de page
+    story += [
+        Spacer(1, 0.4*cm),
+        HRFlowable(width="100%", thickness=0.5, color=muted),
+        Paragraph(
+            f"KANEA v3.0 · NutriTrack AI · Outil d'aide à la décision — "
+            f"Validation clinique obligatoire · Rapport {report_id} · "
+            f"{now.strftime('%d/%m/%Y')}",
+            sm,
+        ),
+    ]
+    doc.build(story)
+    return buf.getvalue()
+
+
 def _build_malaria_pdf(result: dict[str, Any], patient_id: str | None) -> bytes:
     """Rapport médical A4 dédié MalariaScan AI avec QR code et carte CAM."""
     from reportlab.lib import colors
@@ -398,6 +600,11 @@ def build_pdf_report(
         # Module malaria : rapport clinique dédié avec QR code + CAM
         if module == "malaria":
             pdf_bytes = _build_malaria_pdf(result, patient_id)
+            return pdf_bytes, "application/pdf"
+
+        # Module nutrition : rapport NutriTrack AI avec SHAP + recommandations
+        if module in ("nutrition", "biometry"):
+            pdf_bytes = _build_nutrition_pdf(result, patient_id)
             return pdf_bytes, "application/pdf"
 
         from reportlab.lib import colors

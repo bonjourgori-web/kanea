@@ -222,6 +222,48 @@ def predict_biometry(request: NutritionInput) -> dict:
     return predict_nutrition(request.model_dump())
 
 
+@app.post("/predict/nutrition")
+def predict_nutrition_route(request: NutritionInput) -> dict:
+    """Alias NutriTrack AI — statut nutritionnel complet avec SHAP et recommandations."""
+    return predict_nutrition(request.model_dump())
+
+
+@app.post("/predict/nutrition/risk")
+def predict_nutrition_risk(request: NutritionInput) -> dict:
+    """Niveau de risque nutritionnel et score composite."""
+    result = predict_nutrition(request.model_dump())
+    return {
+        "request_id":           result.get("request_id"),
+        "prediction":           result.get("prediction"),
+        "confidence":           result.get("confidence"),
+        "risk_level":           result.get("risk_level"),
+        "nutrition_risk_score": (result.get("derived_features") or {}).get("nutrition_risk_score"),
+        "clinical_urgency":     (result.get("recommendations") or {}).get("urgency"),
+        "bmi":                  (result.get("derived_features") or {}).get("bmi"),
+        "processing_ms":        result.get("processing_ms"),
+        "status":               result.get("status"),
+    }
+
+
+@app.post("/nutrition/report")
+async def generate_nutrition_report(request: NutritionInput) -> dict:
+    """Analyse complète + rapport PDF médical NutriTrack AI (base64)."""
+    import base64
+    result = predict_nutrition(request.model_dump())
+    try:
+        from dashboard.export_pdf import build_pdf_report
+        pdf_bytes, _ = build_pdf_report(result, module="nutrition")
+        pdf_b64 = base64.b64encode(pdf_bytes).decode("ascii")
+    except Exception as exc:
+        pdf_b64 = None
+        log.warning("NutriTrack PDF generation failed: %s", exc)
+    return {
+        **{k: v for k, v in result.items() if k not in ("explainability",)},
+        "pdf_report_b64": pdf_b64,
+        "pdf_available":  pdf_b64 is not None,
+    }
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # MODULE 3 — FORENSIC / BIOID
 # ═══════════════════════════════════════════════════════════════════════════════

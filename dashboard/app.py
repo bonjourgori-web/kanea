@@ -1898,6 +1898,63 @@ def _render_nutrition() -> None:
                         st.info("ℹ️ Modèle non encore entraîné — résultat placeholder. "
                                 "Lancer `python scripts/train_biometry_model.py`")
 
+                    # ── Recommandations cliniques ───────────────────────────
+                    _reco = pred_data.get("recommendations") or {}
+                    if _reco:
+                        _urg   = _reco.get("urgency", "")
+                        _urg_c = {"CRITIQUE":"#C0392B","ÉLEVÉE":"#E67E22",
+                                  "MODÉRÉE":"#F39C12","FAIBLE":"#27AE60"}.get(_urg,"#5E7A8A")
+                        st.markdown(
+                            f"""<div style="background:#F7F9FC;border-radius:10px;padding:12px 16px;
+                            border-left:4px solid {_urg_c};margin-top:0.5rem;">
+                            <div style="font-size:0.72rem;color:#5E7A8A;font-weight:600;text-transform:uppercase;
+                            margin-bottom:6px;">Recommandations cliniques — Urgence : <span style="color:{_urg_c};font-weight:700;">{_urg}</span></div>
+                            {''.join(f'<div style="font-size:0.85rem;color:#1A2B3C;padding:2px 0;">• {a}</div>' for a in (_reco.get('actions') or [])[:4])}
+                            <div style="font-size:0.78rem;color:#5E7A8A;margin-top:6px;font-style:italic;">{_reco.get('diet_advice','')}</div>
+                            </div>""",
+                            unsafe_allow_html=True,
+                        )
+
+                    # ── Score de risque + SHAP ───────────────────────────────
+                    _rs   = (pred_data.get("derived_features") or {}).get("nutrition_risk_score")
+                    _expl = pred_data.get("explainability") or {}
+                    _shap_img = _expl.get("shap_img_b64")
+
+                    if _rs is not None or _shap_img:
+                        _rc1, _rc2 = st.columns([1, 2])
+                        if _rs is not None:
+                            _rs_c = "#C0392B" if _rs >= 7 else ("#E67E22" if _rs >= 4 else "#27AE60")
+                            _rc1.markdown(
+                                f"""<div style="background:#F7F9FC;border-radius:10px;padding:14px;
+                                border-left:4px solid {_rs_c};text-align:center;margin-top:0.5rem;">
+                                <div style="font-size:0.72rem;color:#5E7A8A;font-weight:600;text-transform:uppercase;">Score de risque</div>
+                                <div style="font-size:2rem;font-weight:800;color:{_rs_c};">{_rs}<span style="font-size:1rem">/10</span></div>
+                                </div>""",
+                                unsafe_allow_html=True,
+                            )
+                        if _shap_img:
+                            _rc2.markdown("**🔍 Facteurs SHAP — contribution à la prédiction**")
+                            _rc2.markdown(
+                                f'<img src="data:image/png;base64,{_shap_img}" '
+                                'style="width:100%;border-radius:8px;border:1px solid #DDE8EE;margin-top:4px;" '
+                                'alt="SHAP factors"/>',
+                                unsafe_allow_html=True,
+                            )
+
+                    # ── Graphiques de performance du modèle ─────────────────
+                    with st.expander("📊 Performance du modèle NutriTrack AI v3.0"):
+                        _mdl_n = Path(__file__).resolve().parents[1] / "models" / "machine_learning"
+                        _nc1, _nc2 = st.columns(2)
+                        _fi_p = _mdl_n / "nutrition_feature_importance.png"
+                        _sh_p = _mdl_n / "nutrition_shap_summary.png"
+                        _cm_p = _mdl_n / "nutrition_confusion_matrix.png"
+                        _rh_p = _mdl_n / "nutrition_risk_heatmap.png"
+                        if _fi_p.exists(): _nc1.image(str(_fi_p), caption="Feature Importance", use_container_width=True)
+                        if _sh_p.exists(): _nc2.image(str(_sh_p), caption="SHAP Summary", use_container_width=True)
+                        _nc3, _nc4 = st.columns(2)
+                        if _cm_p.exists(): _nc3.image(str(_cm_p), caption="Matrice de confusion", use_container_width=True)
+                        if _rh_p.exists(): _nc4.image(str(_rh_p), caption="Carte de risque WHZ × MUAC", use_container_width=True)
+
                     _download_report(pred_data, "nutrition", "dl_nutrition")
                     with st.expander("Réponse JSON complète"):
                         st.json(result)
