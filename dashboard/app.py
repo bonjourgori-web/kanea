@@ -1725,6 +1725,11 @@ def page_dashboard(health_df: pd.DataFrame, climate_df: pd.DataFrame) -> None:
             {"name": "BioID AI",      "color": "#8E44AD", "values": [95.0, 92.0, 94.0, 93.5, 65]},
             {"name": "BreastCancer",  "color": "#D91E7A", "values": [94.0, 99.6, 93.0, 92.8, 75]},
         ]
+        def _hex_rgba(hex_c: str, alpha: float = 0.18) -> str:
+            h = hex_c.lstrip("#")
+            r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+            return f"rgba({r},{g},{b},{alpha})"
+
         _radar_fig = go.Figure()
         for _mod in _perf_data:
             _v = _mod["values"] + [_mod["values"][0]]
@@ -1734,7 +1739,7 @@ def page_dashboard(health_df: pd.DataFrame, climate_df: pd.DataFrame) -> None:
                 fill="toself",
                 name=_mod["name"],
                 line=dict(color=_mod["color"], width=2),
-                fillcolor=_mod["color"] + "25",
+                fillcolor=_hex_rgba(_mod["color"]),
             ))
         _radar_fig.update_layout(
             polar=dict(
