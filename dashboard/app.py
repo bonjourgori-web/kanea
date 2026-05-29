@@ -1427,13 +1427,70 @@ def _render_paludisme() -> None:
                 st.info("ℹ️ Modèle non encore chargé — résultat placeholder.")
 
             if _gc:
-                st.markdown("**🔥 Carte Grad-CAM — zones d'activation**")
+                st.markdown("**🔥 Carte CAM — localisation du parasite**")
                 st.markdown(
                     f'<img src="data:image/png;base64,{_gc}" '
                     'style="width:100%;border-radius:12px;border:1px solid #DDE8EE;" '
-                    'alt="Grad-CAM heatmap"/>',
+                    'alt="CAM heatmap"/>',
                     unsafe_allow_html=True,
                 )
+
+            # ── ANALYSES CLINIQUES AVANCÉES ──────────────────────────────────
+            _full = st.session_state.get("malaria_result") or {}
+            _parasitemia = _full.get("parasitemia") or {}
+            _species     = _full.get("species_prediction") or {}
+            _stage       = _full.get("parasite_stage") or {}
+            _safety      = _full.get("clinical_safety") or {}
+
+            if _parasitemia and _full.get("prediction") == "Parasitized":
+                st.markdown("<div style='height:.4rem'></div>", unsafe_allow_html=True)
+                _cl1, _cl2, _cl3 = st.columns(3)
+
+                # Parasitémie
+                _pct = _parasitemia.get("percentage", 0)
+                _sev = _parasitemia.get("severity", "—")
+                _sev_color = {"Faible (< 1%)": "#27AE60", "Modérée (1–5%)": "#F39C12",
+                              "Sévère (5–10%)": "#E67E22", "Critique (> 10%)": "#C0392B"}.get(_sev, "#5E7A8A")
+                _cl1.markdown(
+                    f"""<div style="background:#F7F9FC;border-radius:10px;padding:12px 14px;
+                    border-left:4px solid {_sev_color};">
+                    <div style="font-size:0.72rem;color:#5E7A8A;font-weight:600;text-transform:uppercase;margin-bottom:4px;">Parasitémie estimée</div>
+                    <div style="font-size:1.4rem;font-weight:700;color:{_sev_color};">{_pct}%</div>
+                    <div style="font-size:0.78rem;color:{_sev_color};margin-top:2px;">{_sev}</div>
+                    <div style="font-size:0.68rem;color:#8AABB8;margin-top:4px;">{_parasitemia.get('infected_cells',0)} / {_parasitemia.get('total_cells',120)} cellules</div>
+                    </div>""", unsafe_allow_html=True
+                )
+
+                # Espèce dominante
+                _sp_dom = _species.get("dominant_species", "—")
+                _sp_pf  = _species.get("plasmodium_falciparum", 0)
+                _cl2.markdown(
+                    f"""<div style="background:#F7F9FC;border-radius:10px;padding:12px 14px;
+                    border-left:4px solid #8E44AD;">
+                    <div style="font-size:0.72rem;color:#5E7A8A;font-weight:600;text-transform:uppercase;margin-bottom:4px;">Espèce (estimation)</div>
+                    <div style="font-size:0.95rem;font-weight:700;color:#8E44AD;font-style:italic;">{_sp_dom}</div>
+                    <div style="font-size:0.78rem;color:#8E44AD;margin-top:2px;">P(Pf) = {_sp_pf:.1%}</div>
+                    <div style="font-size:0.65rem;color:#8AABB8;margin-top:4px;">Prior épidémio. Afrique</div>
+                    </div>""", unsafe_allow_html=True
+                )
+
+                # Stade parasitaire
+                _st_dom = _stage.get("dominant_stage", "—")
+                _st_ring = _stage.get("ring", 0)
+                _st_troph = _stage.get("trophozoite", 0)
+                _cl3.markdown(
+                    f"""<div style="background:#F7F9FC;border-radius:10px;padding:12px 14px;
+                    border-left:4px solid #2980B9;">
+                    <div style="font-size:0.72rem;color:#5E7A8A;font-weight:600;text-transform:uppercase;margin-bottom:4px;">Stade parasitaire</div>
+                    <div style="font-size:1.1rem;font-weight:700;color:#2980B9;">{_st_dom}</div>
+                    <div style="font-size:0.73rem;color:#5E7A8A;margin-top:3px;">Ring {_st_ring:.0%} · Troph. {_st_troph:.0%}</div>
+                    <div style="font-size:0.65rem;color:#8AABB8;margin-top:4px;">Analyse pattern CAM</div>
+                    </div>""", unsafe_allow_html=True
+                )
+
+            # Alerte sécurité clinique
+            if _safety.get("level") in ("warning", "low_confidence"):
+                st.warning(f"⚠️ {_safety.get('message', '')}", icon="🏥")
 
             # ── BOUTONS PDF + IMPRESSION ─────────────────────────────────────
             st.markdown("<div style='height:.6rem'></div>", unsafe_allow_html=True)

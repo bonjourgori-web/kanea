@@ -216,51 +216,106 @@ def _build_malaria_pdf(result: dict[str, Any], patient_id: str | None) -> bytes:
 
     story.append(Spacer(1, 0.3*cm))
 
+    # Données cliniques avancées (espèce, stade, parasitémie)
+    parasitemia = result.get("parasitemia") or {}
+    species     = result.get("species_prediction") or {}
+    stage       = result.get("parasite_stage") or {}
+    safety      = result.get("clinical_safety") or {}
+
+    if is_pos and (parasitemia or species or stage):
+        story.append(Paragraph("2. Analyses cliniques avancées", h2))
+
+        # Tableau parasitémie + espèce + stade
+        clinical_rows = [["Paramètre", "Valeur", "Détail"]]
+        if parasitemia:
+            pct = parasitemia.get("percentage", 0)
+            sev = parasitemia.get("severity", "—")
+            inf = parasitemia.get("infected_cells", 0)
+            tot = parasitemia.get("total_cells", 120)
+            clinical_rows.append(["Parasitémie estimée", f"{pct}%  ({sev})", f"{inf}/{tot} cellules"])
+        if species:
+            dom = species.get("dominant_species", "—")
+            pf  = species.get("plasmodium_falciparum", 0)
+            clinical_rows.append(["Espèce (estimation)", dom, f"P(Pf)={pf:.1%} — prior épidémio. Afrique"])
+        if stage:
+            st_dom   = stage.get("dominant_stage", "—")
+            st_ring  = stage.get("ring", 0)
+            st_troph = stage.get("trophozoite", 0)
+            clinical_rows.append(["Stade parasitaire", st_dom, f"Ring {st_ring:.0%} · Troph. {st_troph:.0%}"])
+
+        if len(clinical_rows) > 1:
+            ct = Table(clinical_rows, colWidths=[5*cm, 5*cm, 6.2*cm])
+            ct.setStyle(TableStyle([
+                ("BACKGROUND",    (0, 0), (-1, 0), teal),
+                ("TEXTCOLOR",     (0, 0), (-1, 0), colors.white),
+                ("FONTNAME",      (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE",      (0, 0), (-1, -1), 8.5),
+                ("ROWBACKGROUNDS",(0, 1), (-1, -1), [colors.white, colors.HexColor("#F7F9FC")]),
+                ("GRID",          (0, 0), (-1, -1), 0.4, colors.HexColor("#DDE8EE")),
+                ("TOPPADDING",    (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]))
+            story += [ct, Spacer(1, 0.15*cm)]
+            story.append(Paragraph(
+                "<i>* Espèce et stade : estimations algorithmiques basées sur priors épidémiologiques "
+                "et analyse spatiale CAM — non issues d'un modèle espèces dédié.</i>",
+                ParagraphStyle("note", parent=sm, textColor=muted, fontSize=7.5),
+            ))
+            story.append(Spacer(1, 0.2*cm))
+
+    # Alerte sécurité clinique
+    if safety.get("level") in ("warning", "low_confidence"):
+        story += [
+            Paragraph(
+                f"<b>Alerte sécurité :</b> {safety.get('message', '')}",
+                ParagraphStyle("alert", parent=bd, textColor=red, fontSize=9),
+            ),
+            Spacer(1, 0.15*cm),
+        ]
+
     # Carte CAM
-    expl   = result.get("explainability") or {}
+    expl    = result.get("explainability") or {}
     cam_b64 = expl.get("heatmap_b64") if isinstance(expl, dict) else None
+    sec_num = 3 if (is_pos and (parasitemia or species or stage)) else 2
     if cam_b64:
         cam_buf = _b64_to_image_buffer(cam_b64, size=(200, 200))
         if cam_buf:
             story += [
-                Paragraph("2. Carte d'activation CAM — Localisation du parasite", h2),
+                Paragraph(f"{sec_num}. Carte d'activation CAM — Localisation du parasite", h2),
                 Paragraph(
-                    "La carte thermique ci-dessous indique les zones que le modèle a utilisées "
-                    "pour rendre sa décision (rouge = forte activation, bleu = faible activation).",
+                    "Rouge = forte activation (zone suspecte), Bleu = faible activation.",
                     sm,
                 ),
                 Spacer(1, 0.2*cm),
                 RLImage(cam_buf, width=5*cm, height=5*cm),
                 Spacer(1, 0.2*cm),
             ]
+            sec_num += 1
 
     # Méthodologie
     story += [
-        Paragraph("3. Méthodologie", h2),
+        Paragraph(f"{sec_num}. Méthodologie", h2),
         Paragraph(
-            "Analyse par réseau de neurones convolutif ResNet34 entraîné sur le dataset "
-            "NIH Malaria Cell Images (27 560 images, Parasitized vs Uninfected). "
-            "Prétraitement : redimensionnement 224×224 px, normalisation ImageNet. "
-            "Export ONNX Runtime pour inférence CPU sans dépendance GPU.",
+            "ResNet34 entraîné sur NIH Malaria Cell Images (27 560 images). "
+            "Prétraitement 224×224 px, normalisation ImageNet. ONNX Runtime CPU. "
+            "CAM = Class Activation Map (équivalent Grad-CAM pour ResNet+GAP).",
             bd,
         ),
         Paragraph(
-            f"<b>Performances du modèle (validation) :</b> "
-            f"Accuracy 92.5% · AUC-ROC 0.969 · Version v2.1",
+            "Accuracy 92.5% · AUC-ROC 0.969 · Version v3.0",
             bd,
         ),
-        Spacer(1, 0.2*cm),
+        Spacer(1, 0.15*cm),
     ]
 
     # Recommandation clinique
     story += [
-        Paragraph("4. Recommandation clinique", h2),
+        Paragraph(f"{sec_num + 1}. Recommandation clinique", h2),
         Paragraph(reco, bd),
         Spacer(1, 0.15*cm),
         Paragraph(
-            "<b>Important :</b> Ce rapport est généré par un système d'aide à la décision. "
-            "Il ne remplace pas le diagnostic d'un biologiste qualifié. "
-            "Toute décision thérapeutique doit être validée par un professionnel de santé.",
+            "<b>Important :</b> Outil d'aide à la décision — pas un diagnostic officiel. "
+            "Validation par biologiste qualifié obligatoire avant toute décision thérapeutique.",
             ParagraphStyle("warn", parent=bd, textColor=red, fontSize=8.5),
         ),
     ]
