@@ -226,39 +226,86 @@ def _build_malaria_pdf(result: dict[str, Any], patient_id: str | None) -> bytes:
         story.append(Paragraph("2. Analyses cliniques avancées", h2))
 
         # Tableau parasitémie + espèce + stade
-        clinical_rows = [["Paramètre", "Valeur", "Détail"]]
+        clinical_rows = [["Paramètre", "Valeur", "Interprétation clinique"]]
         if parasitemia:
             pct = parasitemia.get("percentage", 0)
             sev = parasitemia.get("severity", "—")
             inf = parasitemia.get("infected_cells", 0)
             tot = parasitemia.get("total_cells", 120)
-            clinical_rows.append(["Parasitémie estimée", f"{pct}%  ({sev})", f"{inf}/{tot} cellules"])
+            # Interprétation OMS de la sévérité
+            if pct < 1:
+                interp_para = "Faible risque — surveillance standard"
+            elif pct < 5:
+                interp_para = "Risque modéré — traitement ACT recommandé"
+            elif pct < 10:
+                interp_para = "Risque sévère — hospitalisation requise"
+            else:
+                interp_para = "URGENCE — hyperparasitémie, soins intensifs"
+            clinical_rows.append([
+                "Parasitémie estimée",
+                f"{pct}%  ({sev})",
+                f"{inf}/{tot} hématies · {interp_para}",
+            ])
+
         if species:
-            dom = species.get("dominant_species", "—")
-            pf  = species.get("plasmodium_falciparum", 0)
-            clinical_rows.append(["Espèce (estimation)", dom, f"P(Pf)={pf:.1%} — prior épidémio. Afrique"])
+            dom   = species.get("dominant_species", "—")
+            pf    = species.get("plasmodium_falciparum", 0)
+            pv    = species.get("plasmodium_vivax", 0)
+            pm    = species.get("plasmodium_malariae", 0)
+            po    = species.get("plasmodium_ovale", 0)
+            # Fiche clinique espèce dominante
+            species_notes = {
+                "Plasmodium falciparum": "Forme la plus létale — accès pernicieux possible, résistances ACT à surveiller",
+                "Plasmodium vivax":      "Rechutes possibles (hypnozoïtes) — ajouter primaquine au traitement",
+                "Plasmodium malariae":   "Évolution chronique — syndrome néphrotique possible à long terme",
+                "Plasmodium ovale":      "Rechutes possibles (hypnozoïtes) — traitement radical recommandé",
+                "Plasmodium knowlesi":   "Zoonose rare — suivi strict en zone endémique Asie du Sud-Est",
+            }
+            sp_note = species_notes.get(dom, "Espèce à confirmer par expert")
+            clinical_rows.append([
+                "Espèce (estimation)",
+                f"{dom}\n(Pf={pf:.0%} Pv={pv:.0%} Pm={pm:.0%} Po={po:.0%})",
+                sp_note,
+            ])
+
         if stage:
             st_dom   = stage.get("dominant_stage", "—")
             st_ring  = stage.get("ring", 0)
             st_troph = stage.get("trophozoite", 0)
-            clinical_rows.append(["Stade parasitaire", st_dom, f"Ring {st_ring:.0%} · Troph. {st_troph:.0%}"])
+            st_schi  = stage.get("schizont", 0)
+            st_gam   = stage.get("gametocyte", 0)
+            stage_notes = {
+                "Ring":        "Stade précoce — traitement ACT généralement efficace",
+                "Trophozoite": "Stade intermédiaire — métabolisme parasitaire actif",
+                "Schizont":    "Stade avancé — risque de séquestration endothéliale (Pf)",
+                "Gametocyte":  "Forme transmissible — risque de propagation vectorielle",
+            }
+            st_note = stage_notes.get(st_dom, "—")
+            clinical_rows.append([
+                "Stade parasitaire",
+                f"{st_dom}",
+                f"Ring {st_ring:.0%} · Troph {st_troph:.0%} · Schi {st_schi:.0%} · Gam {st_gam:.0%}\n{st_note}",
+            ])
 
         if len(clinical_rows) > 1:
-            ct = Table(clinical_rows, colWidths=[5*cm, 5*cm, 6.2*cm])
+            ct = Table(clinical_rows, colWidths=[4.2*cm, 4.5*cm, 7.5*cm])
             ct.setStyle(TableStyle([
                 ("BACKGROUND",    (0, 0), (-1, 0), teal),
                 ("TEXTCOLOR",     (0, 0), (-1, 0), colors.white),
                 ("FONTNAME",      (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("FONTSIZE",      (0, 0), (-1, -1), 8.5),
+                ("FONTSIZE",      (0, 0), (-1, 0), 8),
+                ("FONTSIZE",      (0, 1), (-1, -1), 8),
                 ("ROWBACKGROUNDS",(0, 1), (-1, -1), [colors.white, colors.HexColor("#F7F9FC")]),
                 ("GRID",          (0, 0), (-1, -1), 0.4, colors.HexColor("#DDE8EE")),
                 ("TOPPADDING",    (0, 0), (-1, -1), 4),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("VALIGN",        (0, 0), (-1, -1), "TOP"),
             ]))
             story += [ct, Spacer(1, 0.15*cm)]
             story.append(Paragraph(
-                "<i>* Espèce et stade : estimations algorithmiques basées sur priors épidémiologiques "
-                "et analyse spatiale CAM — non issues d'un modèle espèces dédié.</i>",
+                "<i>* Espèce et stade : estimations algorithmiques (priors épidémiologiques OMS Afrique + "
+                "analyse spatiale CAM). Confirmation par microscopie optique ou PCR obligatoire avant "
+                "décision thérapeutique.</i>",
                 ParagraphStyle("note", parent=sm, textColor=muted, fontSize=7.5),
             ))
             story.append(Spacer(1, 0.2*cm))

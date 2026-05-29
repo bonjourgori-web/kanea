@@ -1510,26 +1510,17 @@ def _render_paludisme() -> None:
 
             # ── Construction HTML résumé 4 zones ─────────────────────────────
             import datetime as _dt
-            _date_now   = _dt.datetime.now().strftime("%d/%m/%Y à %H:%M")
-            _pred_color = "#e53935" if "parasit" in _pred_norm else "#43a047"
-            _pred_label = "PARASITISÉ — P. falciparum" if "parasit" in _pred_norm else "NON INFECTÉ"
-            _conf_disp  = f"{_conf:.1%}" if _conf else "—"
-            _prob_par   = _proba.get("Parasitized", _proba.get("Parasitised", 0))
-            _prob_uni   = _proba.get("Uninfected", 0)
-            _bar_par    = int(_prob_par * 100)
-            _bar_uni    = int(_prob_uni * 100)
-            _risk_level = "ÉLEVÉ" if "parasit" in _pred_norm else "FAIBLE"
-            _risk_color = "#e53935" if "parasit" in _pred_norm else "#43a047"
-
-            _gc_tag = (
-                f'<img src="data:image/png;base64,{_gc}" '
-                'style="width:100%;max-height:140px;object-fit:cover;border-radius:6px;margin-top:6px;" '
-                'alt="Grad-CAM"/>'
-                if _gc else
-                '<div style="width:100%;height:80px;background:#1e3a5f;border-radius:6px;'
-                'display:flex;align-items:center;justify-content:center;color:#3a6a8f;font-size:12px;margin-top:6px;">'
-                'Grad-CAM non disponible</div>'
-            )
+            _date_now  = _dt.datetime.now().strftime("%d/%m/%Y à %H:%M")
+            _conf_disp = f"{_conf:.1%}" if _conf else "—"
+            _prob_par  = _proba.get("Parasitized", _proba.get("Parasitised", 0))
+            _prob_uni  = _proba.get("Uninfected", 0)
+            # Données cliniques avancées pour le rapport HTML
+            _full_r    = st.session_state.get("malaria_result") or {}
+            _para_pct  = (_full_r.get("parasitemia") or {}).get("percentage", 0)
+            _para_sev  = (_full_r.get("parasitemia") or {}).get("severity", "—")
+            _sp_dom    = ((_full_r.get("species_prediction") or {}).get("dominant_species") or "—")
+            _sp_pf     = ((_full_r.get("species_prediction") or {}).get("plasmodium_falciparum") or 0)
+            _st_dom    = ((_full_r.get("parasite_stage") or {}).get("dominant_stage") or "—")
 
             components.html(
                 f"""
@@ -1570,9 +1561,9 @@ def _render_paludisme() -> None:
                   var riskLabel = isPos ? "ÉLEVÉ" : "FAIBLE";
                   var riskColor = isPos ? "#c0392b" : "#27ae60";
                   var posNegLabel = isPos ? "POSITIF" : "NÉGATIF";
-                  var espece  = isPos ? "<em>Plasmodium falciparum</em>" : "—";
-                  var densite = isPos ? probPar + "% des hématies" : "Indétectable";
-                  var stades  = isPos ? "Trophozoïtes majoritaires (anneau)" : "Non applicable";
+                  var espece    = isPos ? "<em>{_sp_dom}</em> (P(Pf)={_sp_pf:.0%})" : "—";
+                  var densite   = isPos ? "{_para_pct}% — {_para_sev}" : "Indétectable";
+                  var stades    = isPos ? "Stade dominant : {_st_dom}" : "Non applicable";
                   var interpRes = isPos ? "Présence de formes parasitaires confirmée" : "Aucun parasite détecté";
                   var interpGravite = isPos
                     ? "Urgence thérapeutique selon OMS"
@@ -1754,24 +1745,37 @@ def _render_paludisme() -> None:
             with st.expander("🔍 Réponse JSON complète"):
                 st.json(st.session_state.get("malaria_result") or {})
 
-            with st.expander("📊 Performance du modèle MalariaScan AI v2.1"):
+            with st.expander("📊 Performance du modèle MalariaScan AI v3.0"):
                 st.markdown(
                     """
                     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
                     <span style="background:#E9F7EF;color:#27AE60;padding:4px 12px;border-radius:999px;font-weight:700;font-size:0.85rem;">Accuracy 92.5%</span>
                     <span style="background:#EAF4FB;color:#2980B9;padding:4px 12px;border-radius:999px;font-weight:700;font-size:0.85rem;">AUC-ROC 0.969</span>
-                    <span style="background:#FEF9E7;color:#D4AC0D;padding:4px 12px;border-radius:999px;font-weight:700;font-size:0.85rem;">ResNet34 · NIH dataset · v2.1</span>
+                    <span style="background:#F8E8F8;color:#8E44AD;padding:4px 12px;border-radius:999px;font-weight:700;font-size:0.85rem;">AP 0.974</span>
+                    <span style="background:#FEF9E7;color:#D4AC0D;padding:4px 12px;border-radius:999px;font-weight:700;font-size:0.85rem;">ResNet34 · NIH dataset · v3.0</span>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-                _cm_path  = Path(__file__).resolve().parents[1] / "models" / "deep_learning" / "malaria_confusion_matrix.png"
-                _roc_path = Path(__file__).resolve().parents[1] / "models" / "deep_learning" / "malaria_roc_curve.png"
-                _c1, _c2  = st.columns(2)
+                _mdl = Path(__file__).resolve().parents[1] / "models" / "deep_learning"
+                _cm_path  = _mdl / "malaria_confusion_matrix.png"
+                _roc_path = _mdl / "malaria_roc_curve.png"
+                _pr_path  = _mdl / "malaria_precision_recall.png"
+                _sp_path  = _mdl / "malaria_species_distribution.png"
+                _st_path  = _mdl / "malaria_stage_distribution.png"
+                _c1, _c2 = st.columns(2)
                 if _cm_path.exists():
-                    _c1.image(str(_cm_path), caption="Matrice de confusion (validation)", use_container_width=True)
+                    _c1.image(str(_cm_path), caption="Matrice de confusion", use_container_width=True)
                 if _roc_path.exists():
                     _c2.image(str(_roc_path), caption="Courbe ROC — AUC = 0.969", use_container_width=True)
+                _c3, _c4 = st.columns(2)
+                if _pr_path.exists():
+                    _c3.image(str(_pr_path), caption="Courbe Precision-Rappel — AP = 0.974", use_container_width=True)
+                if _sp_path.exists():
+                    _c4.image(str(_sp_path), caption="Distribution espèces Plasmodium (Afrique)", use_container_width=True)
+                if _st_path.exists():
+                    _c5, _ = st.columns([1, 1])
+                    _c5.image(str(_st_path), caption="Distribution stades parasitaires", use_container_width=True)
 
         else:
             st.markdown(

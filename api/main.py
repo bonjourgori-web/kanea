@@ -118,6 +118,83 @@ async def predict_malaria_from_upload(file: UploadFile = File(...)) -> dict:
     return predict_malaria(temp_path)
 
 
+@app.post("/predict/malaria/species")
+async def predict_malaria_species(file: UploadFile = File(...)) -> dict:
+    """Identification de l'espece Plasmodium (estimation epidemiologique)."""
+    suffix = Path(file.filename or "upload.png").suffix or ".png"
+    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        temp_path = tmp.name
+    result = predict_malaria(temp_path)
+    return {
+        "prediction":        result.get("prediction"),
+        "confidence":        result.get("confidence"),
+        "species_prediction": result.get("species_prediction"),
+        "clinical_safety":   result.get("clinical_safety"),
+        "model_version":     result.get("model_version"),
+        "status":            result.get("status"),
+    }
+
+
+@app.post("/predict/malaria/stage")
+async def predict_malaria_stage(file: UploadFile = File(...)) -> dict:
+    """Classification du stade parasitaire (anneau, trophozoite, schizonte, gametocyte)."""
+    suffix = Path(file.filename or "upload.png").suffix or ".png"
+    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        temp_path = tmp.name
+    result = predict_malaria(temp_path)
+    return {
+        "prediction":      result.get("prediction"),
+        "confidence":      result.get("confidence"),
+        "parasite_stage":  result.get("parasite_stage"),
+        "clinical_safety": result.get("clinical_safety"),
+        "model_version":   result.get("model_version"),
+        "status":          result.get("status"),
+    }
+
+
+@app.post("/predict/malaria/parasitemia")
+async def predict_malaria_parasitemia(file: UploadFile = File(...)) -> dict:
+    """Estimation de la parasitemie (% cellules infectees, severite)."""
+    suffix = Path(file.filename or "upload.png").suffix or ".png"
+    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        temp_path = tmp.name
+    result = predict_malaria(temp_path)
+    return {
+        "prediction":      result.get("prediction"),
+        "confidence":      result.get("confidence"),
+        "parasitemia":     result.get("parasitemia"),
+        "clinical_safety": result.get("clinical_safety"),
+        "model_version":   result.get("model_version"),
+        "status":          result.get("status"),
+    }
+
+
+@app.post("/malaria/report")
+async def generate_malaria_report(file: UploadFile = File(...)) -> dict:
+    """Analyse complete + generation rapport PDF medical (base64)."""
+    import base64
+    suffix = Path(file.filename or "upload.png").suffix or ".png"
+    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        temp_path = tmp.name
+    result = predict_malaria(temp_path)
+    try:
+        from dashboard.export_pdf import build_pdf_report
+        pdf_bytes, _ = build_pdf_report(result, module="malaria")
+        pdf_b64 = base64.b64encode(pdf_bytes).decode("ascii")
+    except Exception as exc:
+        pdf_b64 = None
+        log.warning("PDF generation failed: %s", exc)
+    return {
+        **{k: v for k, v in result.items() if k != "explainability"},
+        "pdf_report_b64": pdf_b64,
+        "pdf_available":  pdf_b64 is not None,
+    }
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # MODULE 4 — BREAST CANCER
 # ═══════════════════════════════════════════════════════════════════════════════
