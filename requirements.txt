@@ -16,9 +16,9 @@ folium>=0.16.0
 # ── Machine Learning (NutriTrack AI + BioID AI v2) ──────────────────────────────
 scikit-learn>=1.3.0
 xgboost>=2.0.0
-lightgbm>=4.0.0
 joblib>=1.3.0
-shap>=0.44.0
+# lightgbm et shap : optionnels — lazy import avec fallback dans predictor.py
+# Installation locale uniquement : pip install shap lightgbm
 
 # ── ONNX Runtime (malaria_scan_ai — remplace torch sur Streamlit Cloud) ─────────
 onnxruntime>=1.17.0

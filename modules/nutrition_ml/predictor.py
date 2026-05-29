@@ -167,23 +167,27 @@ def _compute_shap_values(bundle: dict, X: np.ndarray) -> dict[str, Any]:
 
 
 def _compute_rf_importance(bundle: dict, error: str | None = None) -> dict[str, Any]:
-    """Fallback : importances globales RF."""
+    """Fallback : importances globales RF + graphique barre (sans shap)."""
     try:
-        voting = bundle["ensemble"]
-        rf     = dict(voting.estimators).get("rf")
+        voting        = bundle["ensemble"]
+        rf            = dict(voting.estimators).get("rf")
         if rf is None:
             return {"status": "rf_not_found"}
-        importances  = rf.feature_importances_
+        importances   = rf.feature_importances_
         feature_names = bundle["features"]
-        ranked = sorted(zip(feature_names, importances), key=lambda x: x[1], reverse=True)
+        ranked        = sorted(zip(feature_names, importances), key=lambda x: x[1], reverse=True)
+        top_features  = [
+            {"feature": n, "importance": round(float(v), 4), "shap_value": round(float(v), 4), "direction": "+"}
+            for n, v in ranked[:7]
+        ]
+        # Génère quand même le graphique (importance comme proxy SHAP)
+        pred_class    = bundle["classes"][0] if bundle.get("classes") else "?"
+        img_b64       = _generate_shap_bar_b64(top_features, pred_class)
         return {
-            "status":     "generated",
-            "method":     "random_forest_feature_importance",
-            "top_features": [
-                {"feature": n, "importance": round(float(v), 4), "shap_value": None, "direction": "+"}
-                for n, v in ranked[:7]
-            ],
-            "shap_img_b64": None,
+            "status":        "generated",
+            "method":        "random_forest_feature_importance",
+            "top_features":  top_features,
+            "shap_img_b64":  img_b64,
             **({"fallback_reason": error} if error else {}),
         }
     except Exception as e:
