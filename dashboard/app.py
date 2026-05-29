@@ -582,6 +582,77 @@ def inject_styles() -> None:
         ::-webkit-scrollbar-track { background: var(--bg); }
         ::-webkit-scrollbar-thumb { background: #B2C8D4; border-radius: 6px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--teal); }
+
+        /* ── HOME PAGE ───────────────────────────────────────────────────── */
+
+        /* Hover lift sur toutes les cards statiques */
+        .home-module-card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+        }
+        .home-module-card:hover {
+            transform: translateY(-4px) !important;
+            box-shadow: 0 12px 36px rgba(0,0,0,0.12) !important;
+        }
+
+        /* Badge "Scaffold" animé */
+        @keyframes pulseOrange {
+            0%, 100% { opacity: 1; }
+            50%       { opacity: 0.65; }
+        }
+        .badge-scaffold {
+            animation: pulseOrange 2.4s ease-in-out infinite;
+        }
+
+        /* Gradient text pour les titres de section */
+        .section-gradient-title {
+            background: linear-gradient(135deg, var(--teal), #2E86DE);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 900;
+        }
+
+        /* ── SCAFFOLD MODULE RÉSULTATS ──────────────────────────────────── */
+        .scaffold-result-card {
+            border-radius: 16px;
+            padding: 1.2rem 1.4rem;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-md);
+            margin-top: 0.8rem;
+            transition: all 0.2s;
+        }
+
+        /* ── AMÉLIORATION TABS ──────────────────────────────────────────── */
+        .stTabs [data-baseweb="tab-panel"] {
+            padding-top: 1rem !important;
+        }
+
+        /* ── AMÉLIORATION UPLOAD ZONE ───────────────────────────────────── */
+        [data-testid="stFileUploader"] section {
+            border: 2px dashed rgba(32,178,170,0.4) !important;
+            border-radius: var(--radius) !important;
+            background: rgba(32,178,170,0.03) !important;
+            transition: all 0.2s !important;
+        }
+        [data-testid="stFileUploader"] section:hover {
+            border-color: var(--teal) !important;
+            background: rgba(32,178,170,0.07) !important;
+        }
+
+        /* ── NUMBER INPUT ───────────────────────────────────────────────── */
+        [data-baseweb="input"] {
+            border-radius: 10px !important;
+            border-color: var(--border) !important;
+        }
+        [data-baseweb="input"]:focus-within {
+            border-color: var(--teal) !important;
+            box-shadow: 0 0 0 3px rgba(32,178,170,0.15) !important;
+        }
+
+        /* ── SELECT BOX ─────────────────────────────────────────────────── */
+        [data-baseweb="select"] {
+            border-radius: 10px !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -960,7 +1031,7 @@ def render_sidebar() -> tuple[str, str]:
 
         page = st.radio(
             label="nav",
-            options=["📊 Dashboard", "🦠 Maladies", "🗺️ Carte", "⚙️ Paramètres"],
+            options=["🏠 Accueil", "📊 Dashboard", "🦠 Maladies", "🗺️ Carte", "⚙️ Paramètres"],
             label_visibility="collapsed",
             key="main_nav",
         )
@@ -1030,6 +1101,293 @@ def render_sidebar() -> tuple[str, str]:
         )
 
     return page, sous_page
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE : ACCUEIL
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def page_accueil() -> None:
+    from modules.kanea_modules.scaffold import MODULES as _SC_MODS
+
+    # ── Hero ─────────────────────────────────────────────────────────────────
+    if LOGO_PATH.exists():
+        _logo_b64 = base64.b64encode(LOGO_PATH.read_bytes()).decode()
+        _logo_tag = (
+            f'<img src="data:image/png;base64,{_logo_b64}" '
+            'style="height:90px;object-fit:contain;filter:drop-shadow(0 4px 24px rgba(32,178,170,0.7));" />'
+        )
+    else:
+        _logo_tag = '<div style="font-size:3rem;">🧬</div>'
+
+    st.markdown(
+        f"""
+        <div style="
+            background: linear-gradient(135deg, #0D1B2A 0%, #112240 55%, #0A1628 100%);
+            border-radius: 24px;
+            padding: 3rem 3rem 2.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+            border: 1px solid rgba(32,178,170,0.25);
+            position: relative;
+            overflow: hidden;
+        ">
+          <div style="position:absolute;top:0;right:0;width:55%;height:100%;
+               background:radial-gradient(ellipse at 80% 50%, rgba(32,178,170,0.12) 0%, transparent 70%);
+               pointer-events:none;"></div>
+          <div style="display:flex;align-items:center;gap:2.5rem;flex-wrap:wrap;position:relative;">
+            <div>{_logo_tag}</div>
+            <div style="flex:1;min-width:260px;">
+              <div style="display:flex;align-items:center;gap:.7rem;margin-bottom:.4rem;">
+                <span style="background:rgba(32,178,170,0.18);border:1px solid rgba(32,178,170,0.4);
+                     border-radius:999px;padding:.25rem .8rem;font-size:.72rem;font-weight:700;
+                     color:#7EECEA;letter-spacing:.06em;">IA MÉDICALE · AFRIQUE</span>
+              </div>
+              <h1 style="margin:0 0 .4rem;font-size:2.4rem;font-weight:900;color:#FFFFFF;
+                   line-height:1.15;letter-spacing:-.02em;">KANÉA</h1>
+              <p style="margin:0 0 .8rem;font-size:1rem;color:#8AABB8;line-height:1.6;">
+                <strong style="color:#7EECEA;">Knowledge Anthropology &amp; Neural Engine for Africa</strong><br>
+                Plateforme d'intelligence artificielle médicale — 17 modules cliniques · Côte d'Ivoire &amp; Afrique subsaharienne
+              </p>
+              <div style="display:flex;gap:.6rem;flex-wrap:wrap;">
+                <span style="background:rgba(39,174,96,0.15);border:1px solid rgba(39,174,96,0.35);
+                     border-radius:999px;padding:.2rem .7rem;font-size:.72rem;font-weight:700;color:#6EE49E;">
+                     ✅ 4 Modules actifs</span>
+                <span style="background:rgba(46,134,222,0.15);border:1px solid rgba(46,134,222,0.35);
+                     border-radius:999px;padding:.2rem .7rem;font-size:.72rem;font-weight:700;color:#7EC8F8;">
+                     🔬 ONNX · CPU uniquement</span>
+                <span style="background:rgba(142,68,173,0.15);border:1px solid rgba(142,68,173,0.35);
+                     border-radius:999px;padding:.2rem .7rem;font-size:.72rem;font-weight:700;color:#C89EF8;">
+                     📄 Rapports PDF A4</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ── Compteurs statistiques ───────────────────────────────────────────────
+    stats = [
+        ("🧬", "17", "Modules IA", "#20B2AA"),
+        ("✅", "4",  "Modules actifs", "#27AE60"),
+        ("🖼️", "27 560", "Images NIH", "#2E86DE"),
+        ("🎯", "92.5%", "Accuracy malaria", "#E74C3C"),
+        ("📄", "A4 PDF", "Rapports cliniques", "#8E44AD"),
+        ("🌍", "Offline", "Sans cloud requis", "#E67E22"),
+    ]
+    cols = st.columns(len(stats))
+    for col, (icon, val, label, color) in zip(cols, stats):
+        with col:
+            st.markdown(
+                f"""<div style="background:rgba(255,255,255,0.97);border-radius:16px;
+                padding:1.1rem .8rem;text-align:center;border-top:3px solid {color};
+                box-shadow:0 4px 18px rgba(0,0,0,0.07);border:1px solid #DDE8EE;border-top-width:3px;
+                transition:transform .2s;">
+                <div style="font-size:1.5rem;margin-bottom:.2rem;">{icon}</div>
+                <div style="font-size:1.45rem;font-weight:900;color:{color};line-height:1.1;">{val}</div>
+                <div style="font-size:.72rem;font-weight:600;color:#5E7A8A;text-transform:uppercase;
+                letter-spacing:.04em;margin-top:.15rem;">{label}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("<div style='height:1.8rem'></div>", unsafe_allow_html=True)
+
+    # ── Modules principaux (4 actifs) ────────────────────────────────────────
+    st.markdown(
+        "<h2 style='font-size:1.2rem;font-weight:800;color:#1A2B3C;margin:0 0 1rem;'>"
+        "🔬 Modules IA actifs</h2>",
+        unsafe_allow_html=True,
+    )
+
+    _ACTIVE = [
+        {
+            "icon": "🦠", "name": "MalariaScan AI", "version": "v3.0",
+            "color": "#C0392B",
+            "desc": "Détection paludisme sur frottis sanguin — ResNet34 ONNX",
+            "metrics": [("Accuracy", "92.5%"), ("AUC-ROC", "0.969"), ("Dataset", "27 560")],
+            "tags": ["ONNX", "CAM", "PDF A4", "NIH"],
+            "nav": "Paludisme",
+        },
+        {
+            "icon": "📊", "name": "NutriTrack AI", "version": "v3.0",
+            "color": "#E67E22",
+            "desc": "Statut nutritionnel enfant/adulte — RF + XGBoost + SHAP",
+            "metrics": [("Accuracy", "91.3%"), ("F1-score", "90.5%"), ("Entrées", "8 vars")],
+            "tags": ["SHAP", "Z-scores OMS", "PDF A4"],
+            "nav": "Nutrition",
+        },
+        {
+            "icon": "🦴", "name": "BioID AI", "version": "v2",
+            "color": "#8E44AD",
+            "desc": "Profil biologique médico-légal — VotingClassifier + PCA",
+            "metrics": [("Accuracy", "95%"), ("Variables", "23"), ("Méthode", "Trotter-Gleser")],
+            "tags": ["FORDISC", "PCA", "PDF médico-légal"],
+            "nav": "Médico-légal",
+        },
+        {
+            "icon": "🎗️", "name": "BreastCancer AI", "version": "v3.0",
+            "color": "#D91E7A",
+            "desc": "Cancer du sein sur mammographie — EfficientNet-B0 ONNX",
+            "metrics": [("AUC-ROC", "0.996"), ("Classes", "3"), ("ONNX", "16 MB")],
+            "tags": ["ONNX", "TNM", "Grade", "Ki67", "ER/PR/HER2"],
+            "nav": "Cancer sein",
+        },
+    ]
+
+    ac1, ac2, ac3, ac4 = st.columns(4, gap="medium")
+    for col_a, mod in zip([ac1, ac2, ac3, ac4], _ACTIVE):
+        c  = mod["color"]
+        tags_html = "".join(
+            f'<span style="background:{c}18;color:{c};border:1px solid {c}44;'
+            f'border-radius:999px;padding:.18rem .55rem;font-size:.68rem;font-weight:700;'
+            f'margin:.15rem .1rem;display:inline-block;">{t}</span>'
+            for t in mod["tags"]
+        )
+        metrics_html = "".join(
+            f'<div style="display:flex;justify-content:space-between;padding:.25rem 0;'
+            f'border-bottom:1px solid #EEF2F6;">'
+            f'<span style="font-size:.76rem;color:#8AABB8;">{k}</span>'
+            f'<span style="font-size:.76rem;font-weight:700;color:#1A2B3C;">{v}</span></div>'
+            for k, v in mod["metrics"]
+        )
+        with col_a:
+            st.markdown(
+                f"""<div style="background:#FFF;border-radius:18px;padding:1.2rem;
+                border:1px solid #DDE8EE;box-shadow:0 4px 18px rgba(0,0,0,0.06);
+                border-top:4px solid {c};height:100%;">
+                <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;">
+                  <span style="font-size:1.6rem;">{mod['icon']}</span>
+                  <div>
+                    <div style="font-size:.92rem;font-weight:800;color:#1A2B3C;">{mod['name']}</div>
+                    <div style="font-size:.68rem;font-weight:700;color:{c};background:{c}15;
+                    border-radius:4px;padding:1px 6px;display:inline-block;">{mod['version']}</div>
+                  </div>
+                </div>
+                <p style="font-size:.78rem;color:#5E7A8A;line-height:1.55;margin:.4rem 0 .7rem;">{mod['desc']}</p>
+                <div style="margin-bottom:.7rem;">{metrics_html}</div>
+                <div style="line-height:2;">{tags_html}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("<div style='height:1.8rem'></div>", unsafe_allow_html=True)
+
+    # ── Modules scaffold (13) ────────────────────────────────────────────────
+    st.markdown(
+        "<h2 style='font-size:1.2rem;font-weight:800;color:#1A2B3C;margin:0 0 .8rem;'>"
+        "⚙️ Modules en développement <span style='font-size:.78rem;font-weight:500;"
+        "color:#8AABB8;'>(13 modules — modèles en cours d'entraînement)</span></h2>",
+        unsafe_allow_html=True,
+    )
+
+    _SCAFFOLD_ORDER = [
+        ("pulmoscan", "🫁"), ("derm", "🩺"), ("retina", "👁️"), ("cardio", "❤️"),
+        ("neuro", "🧠"), ("gastro", "🔬"), ("histopath", "🧫"), ("osteo", "🦴"),
+        ("sepsis", "🚨"), ("hepato", "🫀"), ("nephro", "💧"), ("hemato", "🩸"),
+        ("gyno", "🎗️"),
+    ]
+
+    _sc_cols = st.columns(4, gap="small")
+    for i, (key, icon) in enumerate(_SCAFFOLD_ORDER):
+        cfg = _SC_MODS.get(key, {})
+        c = cfg.get("color", "#5E7A8A")
+        name = cfg.get("name", key)
+        spec = cfg.get("specialty", "")
+        acc = cfg.get("metrics_ref", {}).get("accuracy", "—")
+        with _sc_cols[i % 4]:
+            st.markdown(
+                f"""<div style="background:#FFF;border-radius:14px;padding:.9rem 1rem;
+                border:1px solid #DDE8EE;box-shadow:0 2px 10px rgba(0,0,0,0.05);
+                margin-bottom:.7rem;border-left:4px solid {c};">
+                <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.3rem;">
+                  <span style="font-size:1.2rem;">{icon}</span>
+                  <div>
+                    <div style="font-size:.84rem;font-weight:700;color:#1A2B3C;">{name}</div>
+                    <div style="font-size:.68rem;color:#8AABB8;">{spec.split('·')[0].strip()}</div>
+                  </div>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.3rem;">
+                  <span style="font-size:.7rem;background:#FEF9E7;color:#CA6F1E;
+                  border-radius:4px;padding:2px 7px;font-weight:700;">⚙️ En entraînement</span>
+                  <span style="font-size:.7rem;font-weight:700;color:{c};">ref: {acc}</span>
+                </div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("<div style='height:1.8rem'></div>", unsafe_allow_html=True)
+
+    # ── Architecture technique ───────────────────────────────────────────────
+    st.markdown(
+        "<h2 style='font-size:1.2rem;font-weight:800;color:#1A2B3C;margin:0 0 1rem;'>"
+        "🏗️ Architecture technique</h2>",
+        unsafe_allow_html=True,
+    )
+
+    _ARCH = [
+        ("🖥️", "Dashboard", "Streamlit v1.30+", "#20B2AA",
+         "Interface clinique multi-modules · Thème KANEA · Graphiques Plotly interactifs"),
+        ("⚡", "API REST", "FastAPI · 20+ routes", "#2E86DE",
+         "Endpoints /predict/* · Upload images · Génération rapports · OpenAPI docs"),
+        ("🤖", "Inference", "ONNX Runtime · CPU", "#E67E22",
+         "Malaria 85 MB + Cancer sein 16 MB · Sans GPU · Latence < 500 ms"),
+        ("📄", "Rapports", "ReportLab · PDF A4", "#8E44AD",
+         "QR code UUID unique · CAM · Tableaux cliniques · Impression directe"),
+        ("🔬", "Explainability", "CAM + SHAP", "#27AE60",
+         "Grad-CAM (images) · SHAP TreeExplainer (tabulaire) · Localisation parasite"),
+        ("🚀", "CI/CD", "GitHub Actions", "#E74C3C",
+         "Tests automatiques · Streamlit Cloud auto-redeploy · Docker ready"),
+    ]
+
+    _arch_cols = st.columns(3, gap="medium")
+    for i, (icon, title, tech, color, desc) in enumerate(_ARCH):
+        with _arch_cols[i % 3]:
+            st.markdown(
+                f"""<div style="background:#FFF;border-radius:16px;padding:1.1rem 1.2rem;
+                border:1px solid #DDE8EE;box-shadow:0 3px 14px rgba(0,0,0,0.06);
+                margin-bottom:.8rem;">
+                <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem;">
+                  <span style="font-size:1.4rem;">{icon}</span>
+                  <div>
+                    <div style="font-size:.92rem;font-weight:800;color:#1A2B3C;">{title}</div>
+                    <div style="font-size:.72rem;font-weight:700;color:{color};background:{color}15;
+                    border-radius:4px;padding:1px 7px;display:inline-block;">{tech}</div>
+                  </div>
+                </div>
+                <p style="font-size:.8rem;color:#5E7A8A;line-height:1.55;margin:0;">{desc}</p>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+    # ── CTA rapide ───────────────────────────────────────────────────────────
+    st.markdown(
+        """
+        <div style="background:linear-gradient(135deg,#0D1B2A,#112240);border-radius:20px;
+        padding:2rem 2.5rem;text-align:center;border:1px solid rgba(32,178,170,0.25);
+        margin-top:.5rem;">
+        <div style="font-size:1.3rem;font-weight:800;color:#FFF;margin-bottom:.5rem;">
+            Prêt à tester KANÉA ?
+        </div>
+        <p style="color:#8AABB8;font-size:.9rem;margin-bottom:1.2rem;">
+            Sélectionnez un module IA dans la barre latérale pour commencer une analyse clinique.
+        </p>
+        <div style="display:flex;justify-content:center;gap:1rem;flex-wrap:wrap;">
+            <div style="background:rgba(32,178,170,0.15);border:1px solid rgba(32,178,170,0.4);
+            border-radius:10px;padding:.6rem 1.4rem;font-size:.85rem;font-weight:700;color:#7EECEA;">
+            🦠 Analyser un frottis paludisme</div>
+            <div style="background:rgba(217,30,122,0.15);border:1px solid rgba(217,30,122,0.4);
+            border-radius:10px;padding:.6rem 1.4rem;font-size:.85rem;font-weight:700;color:#F8A8D0;">
+            🎗️ Analyser une mammographie</div>
+            <div style="background:rgba(142,68,173,0.15);border:1px solid rgba(142,68,173,0.4);
+            border-radius:10px;padding:.6rem 1.4rem;font-size:.85rem;font-weight:700;color:#C89EF8;">
+            🦴 Estimer un profil médico-légal</div>
+        </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1285,6 +1643,113 @@ def page_dashboard(health_df: pd.DataFrame, climate_df: pd.DataFrame) -> None:
             _chart_scatter_climat_paludisme(health_df, climate_df),
             use_container_width=True,
         )
+
+    # ── Graphique 3 : Sunburst modules KANEA + Radar performances ────────────
+    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+    col_sun, col_radar = st.columns(2, gap="medium")
+
+    with col_sun:
+        st.markdown(
+            "<p style='font-weight:700;font-size:1rem;color:#1A2B3C;margin:0 0 .5rem;'>"
+            "🧬 Architecture des 17 modules KANEA</p>",
+            unsafe_allow_html=True,
+        )
+        _sun_data = {
+            "ids": [
+                "KANEA",
+                "Actifs", "Scaffold",
+                "MalariaScan", "NutriTrack", "BioID", "BreastCancer",
+                "PulmoScan", "DermAI", "RetinaVision", "CardioSense", "NeuroVision",
+                "GastroAI", "HistoPath", "OsteoDetect", "SepsisPredict",
+                "HepatoScan", "NephroAI", "HematoVision", "GynoCare",
+            ],
+            "labels": [
+                "KANÉA",
+                "✅ Actifs (4)", "⚙️ En dév. (13)",
+                "🦠 MalariaScan", "📊 NutriTrack", "🦴 BioID", "🎗️ BreastCancer",
+                "🫁 PulmoScan", "🩺 DermAI", "👁️ RetinaVision", "❤️ CardioSense", "🧠 NeuroVision",
+                "🔬 GastroAI", "🧫 HistoPath", "🦴 OsteoDetect", "🚨 SepsisPredict",
+                "🫀 HepatoScan", "💧 NephroAI", "🩸 HematoVision", "🎗️ GynoCare",
+            ],
+            "parents": [
+                "",
+                "KANEA", "KANEA",
+                "Actifs", "Actifs", "Actifs", "Actifs",
+                "Scaffold", "Scaffold", "Scaffold", "Scaffold", "Scaffold",
+                "Scaffold", "Scaffold", "Scaffold", "Scaffold",
+                "Scaffold", "Scaffold", "Scaffold", "Scaffold",
+            ],
+            "values": [
+                17,
+                4, 13,
+                1, 1, 1, 1,
+                1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+            ],
+            "colors": [
+                "#20B2AA",
+                "#27AE60", "#5E7A8A",
+                "#C0392B", "#E67E22", "#8E44AD", "#D91E7A",
+                "#2980B9", "#27AE60", "#8E44AD", "#E74C3C", "#E67E22",
+                "#16A085", "#9B59B6", "#795548", "#C0392B",
+                "#E67E22", "#2980B9", "#C0392B", "#D91E7A",
+            ],
+        }
+        _sun_fig = go.Figure(go.Sunburst(
+            ids=_sun_data["ids"],
+            labels=_sun_data["labels"],
+            parents=_sun_data["parents"],
+            values=_sun_data["values"],
+            marker=dict(colors=_sun_data["colors"]),
+            branchvalues="total",
+            hovertemplate="<b>%{label}</b><br>Modules: %{value}<extra></extra>",
+            maxdepth=3,
+            textfont=dict(size=11),
+        ))
+        _sun_fig.update_layout(
+            height=380, margin=dict(l=0, r=0, t=10, b=0),
+            paper_bgcolor="rgba(255,255,255,0.88)",
+            font_family="Inter",
+        )
+        st.plotly_chart(_sun_fig, use_container_width=True)
+
+    with col_radar:
+        st.markdown(
+            "<p style='font-weight:700;font-size:1rem;color:#1A2B3C;margin:0 0 .5rem;'>"
+            "🎯 Performances des 4 modules actifs</p>",
+            unsafe_allow_html=True,
+        )
+        _categories = ["Accuracy", "AUC-ROC", "F1-score", "Sensitivity", "Dataset size"]
+        _perf_data = [
+            {"name": "MalariaScan",   "color": "#C0392B", "values": [92.5, 96.9, 95.8, 91.4, 90]},
+            {"name": "NutriTrack",    "color": "#E67E22", "values": [91.3, 88.0, 90.5, 89.7, 70]},
+            {"name": "BioID AI",      "color": "#8E44AD", "values": [95.0, 92.0, 94.0, 93.5, 65]},
+            {"name": "BreastCancer",  "color": "#D91E7A", "values": [94.0, 99.6, 93.0, 92.8, 75]},
+        ]
+        _radar_fig = go.Figure()
+        for _mod in _perf_data:
+            _v = _mod["values"] + [_mod["values"][0]]
+            _radar_fig.add_trace(go.Scatterpolar(
+                r=_v,
+                theta=_categories + [_categories[0]],
+                fill="toself",
+                name=_mod["name"],
+                line=dict(color=_mod["color"], width=2),
+                fillcolor=_mod["color"] + "25",
+            ))
+        _radar_fig.update_layout(
+            polar=dict(
+                radialaxis=dict(visible=True, range=[60, 100], tickfont=dict(size=9, color="#5E7A8A")),
+                angularaxis=dict(tickfont=dict(size=11, color="#1A2B3C")),
+                bgcolor="rgba(255,255,255,0)",
+            ),
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=-0.18, xanchor="center", x=0.5,
+                        font=dict(size=11, color="#1A2B3C")),
+            height=380, margin=dict(l=30, r=30, t=20, b=40),
+            paper_bgcolor="rgba(255,255,255,0.88)",
+            font_family="Inter",
+        )
+        st.plotly_chart(_radar_fig, use_container_width=True)
 
     # ── Epidémio complète (onglets intégrés) ──────────────────────────────────
     with st.expander("📋 Tableau de bord épidémiologique complet", expanded=False):
@@ -1641,7 +2106,7 @@ def _render_paludisme() -> None:
     <div>
       <div style="font-size:9px;font-weight:700;color:#c0392b;margin-bottom:4px;">IDENTIFICATION</div>
       <table style="width:100%;font-size:10px;border-collapse:collapse;">
-        <tr><td style="padding:2px 4px;color:#5e7a8a;">N° de dossier :</td><td style="font-weight:600;">` + iname.replace(/\.[^.]+$/g, '') + `</td></tr>
+        <tr><td style="padding:2px 4px;color:#5e7a8a;">N° de dossier :</td><td style="font-weight:600;">` + iname.replace(/\\.[^.]+$/g, '') + `</td></tr>
         <tr><td style="padding:2px 4px;color:#5e7a8a;">Date d'analyse :</td><td style="font-weight:600;">` + dateNow + `</td></tr>
         <tr><td style="padding:2px 4px;color:#5e7a8a;">Service demandeur :</td><td style="font-weight:600;">Médecine Interne / Urgences</td></tr>
         <tr><td style="padding:2px 4px;color:#5e7a8a;">Nature prélèvement :</td><td style="font-weight:600;">Frottis sanguin — Giemsa</td></tr>
@@ -3068,32 +3533,118 @@ def _render_ai_module(module_key: str) -> None:
                           "Modérée":"#F39C12","Faible":"#27AE60"}
             urg_c = urg_colors.get(urgency, "#5E7A8A")
 
+            # ── Carte résultat principale ─────────────────────────────────
             st.markdown(
-                f"""<div style="background:{c_hex}15;border-left:5px solid {c_hex};
-                border-radius:0 12px 12px 0;padding:1rem 1.2rem;margin-top:0.8rem;">
-                <div style="font-size:1.2rem;font-weight:800;color:{c_hex};">{icon} {pred}</div>
-                <div style="font-size:0.88rem;color:#5E7A8A;margin-top:4px;">
-                Confiance : <b>{conf:.1%}</b> &nbsp;·&nbsp; Urgence : <b style="color:{urg_c}">{urgency}</b></div>
-                <div style="font-size:0.87rem;color:#1A2B3C;margin-top:8px;">
-                💡 <b>Action recommandée :</b> {action}</div>
-                <div style="font-size:0.72rem;color:#8AABB8;margin-top:6px;">
-                ⚠️ Résultat de démonstration — modèle en entraînement · {name} {version}</div>
+                f"""<div style="background:{c_hex}12;border:1.5px solid {c_hex}55;
+                border-radius:16px;padding:1.1rem 1.3rem;margin-top:0.8rem;">
+                <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;">
+                  <div>
+                    <div style="font-size:1.3rem;font-weight:900;color:{c_hex};">{icon} {pred}</div>
+                    <div style="font-size:0.82rem;color:#5E7A8A;margin-top:3px;">
+                      Urgence : <b style="color:{urg_c};">{urgency}</b>
+                      &nbsp;·&nbsp; Confiance : <b style="color:#1A2B3C;">{conf:.1%}</b>
+                    </div>
+                  </div>
+                  <span style="background:{urg_c}20;border:1px solid {urg_c}55;border-radius:999px;
+                  padding:.3rem .9rem;font-size:.75rem;font-weight:800;color:{urg_c};">
+                    {urgency.upper()}</span>
+                </div>
+                <div style="margin-top:.8rem;background:rgba(255,255,255,.7);border-radius:10px;
+                padding:.6rem .8rem;border:1px solid #DDE8EE;">
+                  <div style="font-size:.72rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;
+                  margin-bottom:.25rem;">Action recommandée</div>
+                  <div style="font-size:.88rem;color:#1A2B3C;font-weight:600;">💡 {action}</div>
+                </div>
+                <div style="font-size:0.7rem;color:#AABBCC;margin-top:.6rem;">
+                ⚙️ Résultat de démonstration — modèle en cours d'entraînement · {name} {version}</div>
                 </div>""",
                 unsafe_allow_html=True,
             )
 
-            # Probabilités
+            # ── Jauge confiance + Probabilités Plotly ─────────────────────
             probs = result.get("probabilities", {})
             if probs:
-                with st.expander("📊 Probabilités par classe"):
-                    for cls, p in sorted(probs.items(), key=lambda x: -x[1]):
-                        cl_c = cfg["clinical_classes"].get(cls, {}).get("color", "#5E7A8A")
+                r_gauge, r_bars = st.columns([1, 2], gap="medium")
+
+                with r_gauge:
+                    _gauge_fig = go.Figure(go.Indicator(
+                        mode="gauge+number",
+                        value=round(conf * 100, 1),
+                        number={"suffix": "%", "font": {"size": 26, "color": c_hex}},
+                        gauge={
+                            "axis":       {"range": [0, 100], "tickwidth": 1, "tickcolor": "#DDE8EE"},
+                            "bar":        {"color": c_hex, "thickness": 0.28},
+                            "bgcolor":    "rgba(0,0,0,0)",
+                            "bordercolor":"rgba(0,0,0,0)",
+                            "steps": [
+                                {"range": [0,  50], "color": "rgba(231,76,60,0.10)"},
+                                {"range": [50, 75], "color": "rgba(243,156,18,0.10)"},
+                                {"range": [75,100], "color": "rgba(39,174,96,0.10)"},
+                            ],
+                            "threshold": {
+                                "line":  {"color": "#1A2B3C", "width": 2},
+                                "thickness": 0.75,
+                                "value": round(conf * 100, 1),
+                            },
+                        },
+                        title={"text": "Confiance IA", "font": {"size": 13, "color": "#5E7A8A"}},
+                    ))
+                    _gauge_fig.update_layout(
+                        height=200, margin=dict(l=10, r=10, t=30, b=10),
+                        paper_bgcolor="rgba(0,0,0,0)", font_family="Inter",
+                    )
+                    st.plotly_chart(_gauge_fig, use_container_width=True)
+
+                with r_bars:
+                    _sorted = sorted(probs.items(), key=lambda x: x[1])
+                    _labels = [c for c, _ in _sorted]
+                    _vals   = [round(p * 100, 1) for _, p in _sorted]
+                    _colors = [cfg["clinical_classes"].get(c, {}).get("color", "#5E7A8A") for c, _ in _sorted]
+
+                    _bar_fig = go.Figure(go.Bar(
+                        x=_vals, y=_labels,
+                        orientation="h",
+                        marker_color=_colors,
+                        text=[f"{v:.1f}%" for v in _vals],
+                        textposition="outside",
+                        textfont=dict(size=11, color="#1A2B3C"),
+                    ))
+                    _bar_fig.update_layout(
+                        height=max(180, len(_labels) * 30),
+                        xaxis=dict(range=[0, 105], showgrid=False, visible=False),
+                        yaxis=dict(tickfont=dict(size=11, color="#1A2B3C")),
+                        margin=dict(l=5, r=40, t=5, b=5),
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        showlegend=False,
+                        font_family="Inter",
+                        title=dict(text="Probabilités par classe", font=dict(size=12, color="#5E7A8A")),
+                    )
+                    st.plotly_chart(_bar_fig, use_container_width=True)
+
+            # ── Pathway clinique ─────────────────────────────────────────
+            _path_classes = [
+                (c, cfg["clinical_classes"][c]["urgency"], cfg["clinical_classes"][c]["action"],
+                 cfg["clinical_classes"][c]["color"])
+                for c in cfg.get("classes", [])
+                if c in cfg.get("clinical_classes", {})
+            ]
+            if _path_classes:
+                with st.expander("🏥 Pathway clinique — toutes les classes"):
+                    for _cls, _urg_p, _act_p, _col_p in _path_classes:
+                        _is_pred = (_cls == pred)
+                        _bg = f"{_col_p}18" if _is_pred else "rgba(0,0,0,0)"
+                        _brd = f"2px solid {_col_p}88" if _is_pred else f"1px solid #EEF2F6"
                         st.markdown(
-                            f"""<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-                            <div style="width:100px;font-size:0.82rem;color:#1A2B3C;">{cls}</div>
-                            <div style="flex:1;background:#EEF2F5;border-radius:4px;height:16px;overflow:hidden;">
-                            <div style="width:{p*100:.0f}%;height:100%;background:{cl_c};border-radius:4px;"></div></div>
-                            <div style="width:45px;font-size:0.82rem;font-weight:600;color:{cl_c};text-align:right;">{p:.1%}</div>
+                            f"""<div style="display:flex;align-items:center;gap:.6rem;
+                            padding:.45rem .7rem;border-radius:10px;margin-bottom:.3rem;
+                            background:{_bg};border:{_brd};">
+                            <span style="width:10px;height:10px;border-radius:50%;
+                            background:{_col_p};flex-shrink:0;display:inline-block;"></span>
+                            <div style="flex:1;font-size:.82rem;color:#1A2B3C;font-weight:{'700' if _is_pred else '400'};">{_cls}</div>
+                            <span style="font-size:.7rem;font-weight:700;color:{_col_p};
+                            background:{_col_p}18;border-radius:4px;padding:2px 7px;white-space:nowrap;">{_urg_p}</span>
+                            <div style="font-size:.75rem;color:#5E7A8A;flex:2;text-align:right;">{_act_p[:45]}…</div>
                             </div>""",
                             unsafe_allow_html=True,
                         )
@@ -3437,7 +3988,10 @@ def main() -> None:
     health_df, climate_df = load_data()
 
     # Routage pages
-    if page == "📊 Dashboard":
+    if page == "🏠 Accueil":
+        page_accueil()
+
+    elif page == "📊 Dashboard":
         page_dashboard(health_df, climate_df)
 
     elif page == "🦠 Maladies":
