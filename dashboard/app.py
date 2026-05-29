@@ -970,7 +970,20 @@ def render_sidebar() -> tuple[str, str]:
             st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
             sous_page = st.selectbox(
                 "Sélectionner un module",
-                ["Paludisme", "Nutrition", "Médico-légal", "Cancer sein"],
+                [
+                    # ── Modules actifs ──────────────────────────────────────
+                    "Paludisme", "Nutrition", "Médico-légal", "Cancer sein",
+                    # ── Infectiologie & Urgences ────────────────────────────
+                    "PulmoScan AI", "SepsisPredict AI",
+                    # ── Oncologie & Imagerie ────────────────────────────────
+                    "DermAI", "RetinaVision AI", "NeuroVision AI",
+                    "GastroAI", "HistoPath AI",
+                    # ── Organes & Biologie ──────────────────────────────────
+                    "CardioSense AI", "HepatoScan AI", "NephroAI",
+                    "OsteoDetect AI", "HematoVision AI",
+                    # ── Gynécologie ─────────────────────────────────────────
+                    "GynoCare AI",
+                ],
                 key="sous_maladie",
             )
 
@@ -2903,14 +2916,217 @@ def _render_breast_cancer() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
 
 
+def _render_ai_module(module_key: str) -> None:
+    """Render partagé pour tous les modules scaffold (sans modèle entraîné)."""
+    from modules.kanea_modules.scaffold import MODULES, scaffold_predict
+
+    cfg = MODULES.get(module_key, {})
+    if not cfg:
+        st.error(f"Module '{module_key}' introuvable."); return
+
+    color   = cfg.get("color", "#20B2AA")
+    icon    = cfg.get("icon", "🤖")
+    name    = cfg.get("name", module_key)
+    version = "v1.0"
+
+    st.markdown(
+        f"""<div class="page-header" style="background:linear-gradient(135deg,{color},{color}BB);">
+            <h1>{icon} {name}</h1>
+            <p>{cfg.get('specialty','')} · KANEA AI Platform</p>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    col_info, col_form = st.columns([1, 1.5], gap="large")
+
+    with col_info:
+        # Description + classes
+        classes_html = "".join(
+            f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
+            f'<span style="width:10px;height:10px;border-radius:50%;background:{cfg["clinical_classes"][c]["color"]};display:inline-block;flex-shrink:0;"></span>'
+            f'<span style="font-size:0.82rem;color:#1A2B3C;">{c}'
+            f' <span style="color:#8AABB8;font-size:0.74rem;">— {cfg["clinical_classes"][c]["action"][:40]}...</span></span></div>'
+            for c in cfg.get("classes", [])
+        )
+        prev_afr = cfg.get("africa_context", "")
+        risk_factors = cfg.get("risk_factors", [])
+        rf_html = "".join(f'<span style="background:#F0F4F8;color:#5E7A8A;padding:2px 7px;border-radius:4px;font-size:0.76rem;margin:2px;display:inline-block;">• {r}</span>' for r in risk_factors[:6])
+
+        diag_list = cfg.get("diagnosis", [])
+        diag_html = "".join(f'<div style="font-size:0.81rem;color:#1A2B3C;padding:1px 0;">🔹 {d}</div>' for d in diag_list[:5])
+
+        st.markdown(
+            f"""<div class="section-card">
+            <div class="section-title">{icon} Description clinique</div>
+            <p style="color:#5E7A8A;line-height:1.7;font-size:0.88rem;">{cfg.get('description','')}</p>
+            {'<div style="background:#FEF9E7;border-left:3px solid #F39C12;padding:6px 10px;border-radius:0 6px 6px 0;margin-top:8px;font-size:0.82rem;color:#1A2B3C;">🌍 <b>Contexte Afrique :</b> ' + prev_afr + '</div>' if prev_afr else ''}
+            <div style="margin-top:10px;">
+            <div style="font-size:0.72rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;margin-bottom:6px;">Classes détectées</div>
+            {classes_html}
+            </div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+        if risk_factors:
+            st.markdown(
+                f"""<div class="section-card" style="margin-top:0.6rem;">
+                <div class="section-title">⚠️ Facteurs de risque</div>
+                <div style="line-height:2;">{rf_html}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+        if diag_list:
+            st.markdown(
+                f"""<div class="section-card" style="margin-top:0.6rem;">
+                <div class="section-title">🔬 Examens diagnostiques clés</div>
+                {diag_html}
+                {'<div style="font-size:0.78rem;color:#5E7A8A;margin-top:6px;font-style:italic;">' + cfg.get('treatment_ref','') + '</div>' if cfg.get('treatment_ref') else ''}
+                </div>""",
+                unsafe_allow_html=True,
+            )
+        if cfg.get("icd10"):
+            st.markdown(
+                f"""<div class="section-card" style="margin-top:0.6rem;">
+                <div class="section-title">📊 Données épidémiologiques</div>
+                <div style="font-size:0.82rem;color:#1A2B3C;margin-bottom:6px;">{cfg.get('prevalence','')}</div>
+                <div style="font-size:0.75rem;color:#5E7A8A;"><b>CIM-10 :</b> {cfg.get('icd10','')}</div>
+                <div style="font-size:0.75rem;color:#5E7A8A;margin-top:4px;">Dataset : {cfg.get('dataset_ref','')} · Archi : {cfg.get('model_arch','')}</div>
+                {"".join(f'<div style="font-size:0.8rem;color:#1A2B3C;padding:1px 0;"><b>{k} :</b> {v}</div>' for k,v in cfg.get("metrics_ref",{}).items())}
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+    with col_form:
+        st.markdown(
+            f"""<div style="background:linear-gradient(135deg,{color}22,{color}11);border:1.5px dashed {color}55;
+            border-radius:12px;padding:0.8rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:10px;">
+            <span style="font-size:1.4rem;">⚙️</span>
+            <div><div style="font-size:0.8rem;font-weight:700;color:{color};">Modèle en cours d'entraînement</div>
+            <div style="font-size:0.75rem;color:#5E7A8A;">
+            Dataset : {cfg.get('dataset_ref','').split('(')[0].strip()} — Disponible prochainement</div></div></div>""",
+            unsafe_allow_html=True,
+        )
+
+        st.markdown("<div class='section-card'><div class='section-title'>📤 Analyser</div>", unsafe_allow_html=True)
+
+        params = {}
+        sess_key = f"mod_{module_key}_result"
+        if sess_key not in st.session_state:
+            st.session_state[sess_key] = None
+
+        if cfg.get("input_type") == "image":
+            fmts = [f.lower() for f in cfg.get("formats", ["png","jpg"])]
+            uploaded = st.file_uploader(
+                f"Importer une image ({', '.join(cfg.get('formats', ['PNG','JPG']))})",
+                type=fmts, key=f"upload_{module_key}",
+            )
+            if uploaded:
+                st.image(uploaded, use_container_width=True)
+            if st.button(f"{icon} Lancer l'analyse", use_container_width=True, key=f"btn_{module_key}"):
+                with st.spinner("Analyse IA en cours..."):
+                    import tempfile, os
+                    if uploaded:
+                        suffix = Path(uploaded.name).suffix or ".png"
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                            tmp.write(uploaded.getbuffer())
+                            tmp_path = tmp.name
+                        result = scaffold_predict(module_key, image_path=tmp_path)
+                        os.unlink(tmp_path)
+                    else:
+                        result = scaffold_predict(module_key)
+                    st.session_state[sess_key] = result
+        else:
+            # Module paramètres
+            p_cols = st.columns(2)
+            for i, p in enumerate(cfg.get("params", [])):
+                col = p_cols[i % 2]
+                k, lbl = p["key"], p["label"]
+                if p["type"] == "select":
+                    params[k] = col.selectbox(lbl, p["options"], key=f"{module_key}_{k}")
+                elif p["type"] == "float":
+                    params[k] = col.number_input(lbl, min_value=float(p["min"]), max_value=float(p["max"]),
+                                                  value=float(p["default"]), step=0.1, key=f"{module_key}_{k}")
+                else:
+                    params[k] = col.number_input(lbl, min_value=p["min"], max_value=p["max"],
+                                                  value=p["default"], key=f"{module_key}_{k}")
+            if st.button(f"{icon} Analyser", use_container_width=True, key=f"btn_{module_key}"):
+                with st.spinner("Calcul du risque clinique..."):
+                    st.session_state[sess_key] = scaffold_predict(module_key, params=params)
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # Affichage résultat
+        result = st.session_state.get(sess_key)
+        if result:
+            pred    = result.get("prediction", "—")
+            conf    = result.get("confidence", 0)
+            action  = result.get("recommended_action", "—")
+            urgency = result.get("risk_level", "—")
+            cl_info = result.get("clinical_info", {})
+            c_hex   = cl_info.get("color", color)
+            urg_colors = {"EXTRÊME":"#7B241C","Critique":"#C0392B","Élevée":"#E74C3C",
+                          "Modérée":"#F39C12","Faible":"#27AE60"}
+            urg_c = urg_colors.get(urgency, "#5E7A8A")
+
+            st.markdown(
+                f"""<div style="background:{c_hex}15;border-left:5px solid {c_hex};
+                border-radius:0 12px 12px 0;padding:1rem 1.2rem;margin-top:0.8rem;">
+                <div style="font-size:1.2rem;font-weight:800;color:{c_hex};">{icon} {pred}</div>
+                <div style="font-size:0.88rem;color:#5E7A8A;margin-top:4px;">
+                Confiance : <b>{conf:.1%}</b> &nbsp;·&nbsp; Urgence : <b style="color:{urg_c}">{urgency}</b></div>
+                <div style="font-size:0.87rem;color:#1A2B3C;margin-top:8px;">
+                💡 <b>Action recommandée :</b> {action}</div>
+                <div style="font-size:0.72rem;color:#8AABB8;margin-top:6px;">
+                ⚠️ Résultat de démonstration — modèle en entraînement · {name} {version}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+            # Probabilités
+            probs = result.get("probabilities", {})
+            if probs:
+                with st.expander("📊 Probabilités par classe"):
+                    for cls, p in sorted(probs.items(), key=lambda x: -x[1]):
+                        cl_c = cfg["clinical_classes"].get(cls, {}).get("color", "#5E7A8A")
+                        st.markdown(
+                            f"""<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                            <div style="width:100px;font-size:0.82rem;color:#1A2B3C;">{cls}</div>
+                            <div style="flex:1;background:#EEF2F5;border-radius:4px;height:16px;overflow:hidden;">
+                            <div style="width:{p*100:.0f}%;height:100%;background:{cl_c};border-radius:4px;"></div></div>
+                            <div style="width:45px;font-size:0.82rem;font-weight:600;color:{cl_c};text-align:right;">{p:.1%}</div>
+                            </div>""",
+                            unsafe_allow_html=True,
+                        )
+
+
 def page_maladies(sous_page: str) -> None:
+    _MODULE_MAP = {
+        "PulmoScan AI":      "pulmoscan",
+        "DermAI":            "derm",
+        "RetinaVision AI":   "retina",
+        "CardioSense AI":    "cardio",
+        "NeuroVision AI":    "neuro",
+        "GastroAI":          "gastro",
+        "HistoPath AI":      "histopath",
+        "OsteoDetect AI":    "osteo",
+        "SepsisPredict AI":  "sepsis",
+        "HepatoScan AI":     "hepato",
+        "NephroAI":          "nephro",
+        "HematoVision AI":   "hemato",
+        "GynoCare AI":       "gyno",
+    }
     dispatch = {
         "Paludisme":    _render_paludisme,
         "Nutrition":    _render_nutrition,
         "Médico-légal": _render_medicolegal,
         "Cancer sein":  _render_breast_cancer,
     }
-    dispatch.get(sous_page, _render_paludisme)()
+    if sous_page in dispatch:
+        dispatch[sous_page]()
+    elif sous_page in _MODULE_MAP:
+        _render_ai_module(_MODULE_MAP[sous_page])
+    else:
+        _render_paludisme()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

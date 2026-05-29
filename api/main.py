@@ -298,6 +298,52 @@ async def generate_bc_report(file: UploadFile = File(...)) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# MODULES 5–17 — SCAFFOLD AI MODULES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+from modules.kanea_modules.scaffold import scaffold_predict, MODULES as _SCAFFOLD_MODULES
+
+def _make_scaffold_routes() -> None:
+    """Enregistre dynamiquement les routes pour tous les modules scaffold."""
+    _ROUTE_MAP = {
+        "pulmoscan": "/predict/pulmoscan",
+        "derm":      "/predict/derm",
+        "retina":    "/predict/retina",
+        "cardio":    "/predict/cardio",
+        "neuro":     "/predict/neuro",
+        "gastro":    "/predict/gastro",
+        "histopath": "/predict/histopath",
+        "osteo":     "/predict/osteo",
+        "sepsis":    "/predict/sepsis",
+        "hepato":    "/predict/hepato",
+        "nephro":    "/predict/nephro",
+        "hemato":    "/predict/hemato",
+        "gyno":      "/predict/gyno",
+    }
+    for module_key, route in _ROUTE_MAP.items():
+        cfg = _SCAFFOLD_MODULES.get(module_key, {})
+
+        # Route upload (image modules)
+        if cfg.get("input_type") == "image":
+            async def _upload_route(file: UploadFile = File(...), _mk=module_key) -> dict:
+                suffix = Path(file.filename or "upload.png").suffix or ".png"
+                with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                    tmp.write(await file.read())
+                    temp_path = tmp.name
+                return scaffold_predict(_mk, image_path=temp_path)
+            _upload_route.__name__ = f"predict_{module_key}_upload"
+            app.post(route + "/upload", tags=[cfg.get("name", module_key)])(_upload_route)
+        else:
+            # Route paramètres (JSON body)
+            def _param_route(payload: dict = {}, _mk=module_key) -> dict:
+                return scaffold_predict(_mk, params=payload)
+            _param_route.__name__ = f"predict_{module_key}"
+            app.post(route, tags=[cfg.get("name", module_key)])(_param_route)
+
+_make_scaffold_routes()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # MODULE 2 — BIOMETRY / NUTRITION
 # ═══════════════════════════════════════════════════════════════════════════════
 
