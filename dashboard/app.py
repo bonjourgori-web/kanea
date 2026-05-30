@@ -4012,6 +4012,322 @@ def _render_pulmoscan() -> None:
         )
 
 
+def _render_sepsis() -> None:
+    """SepsisPredict AI v2.0 — Interface clinique complète (sepsis, choc septique, DMV)."""
+    from modules.sepsis_ai.predictor import predict_sepsis, DEFAULT_PARAMS
+    from modules.sepsis_ai.alerts import generate_sepsis_alerts, get_alert_summary
+    from modules.sepsis_ai.report import build_sepsis_pdf_report, build_sepsis_html_report
+
+    for _k in ("sepsis_result", "sepsis_alerts", "sepsis_pdf"):
+        if _k not in st.session_state:
+            st.session_state[_k] = None
+
+    st.markdown(
+        """<div class="page-header" style="background:linear-gradient(135deg,#7B241C,#C0392B);">
+            <h1>🚨 SepsisPredict AI — Module 9 · v2.0</h1>
+            <p>Détection précoce sepsis · SOFA · qSOFA · NEWS2 · APACHE II · Risque mortalité multi-horizons</p>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    # ── FORMULAIRE PARAMÈTRES CLINIQUES ──────────────────────────────────────
+    col_form, col_result = st.columns([1.2, 1], gap="large")
+
+    with col_form:
+        st.markdown("<div class='section-card'><div class='section-title'>🩺 Paramètres cliniques</div>", unsafe_allow_html=True)
+
+        tab_vitaux, tab_bio, tab_patient = st.tabs(["🫀 Signes vitaux", "🧪 Biologie", "👤 Patient"])
+
+        params: dict = {}
+
+        with tab_vitaux:
+            c1, c2 = st.columns(2)
+            params["temperature"]  = c1.number_input("Température (°C)", 30.0, 43.0, 37.0, 0.1, key="sep_temp")
+            params["heart_rate"]   = c2.number_input("FC (bpm)", 20, 250, 75, key="sep_hr")
+            c3, c4 = st.columns(2)
+            params["resp_rate"]    = c3.number_input("FR (/min)", 5, 60, 16, key="sep_rr")
+            params["spo2"]         = c4.number_input("SpO2 (%)", 50.0, 100.0, 98.0, 0.5, key="sep_spo2")
+            c5, c6 = st.columns(2)
+            params["systolic_bp"]  = c5.number_input("PAS (mmHg)", 50, 250, 120, key="sep_sbp")
+            params["diastolic_bp"] = c6.number_input("PAD (mmHg)", 30, 150, 80, key="sep_dbp")
+            c7, c8 = st.columns(2)
+            params["map"]          = c7.number_input("MAP (mmHg)", 20.0, 200.0,
+                                        round((120 + 2*80) / 3, 0), 1.0, key="sep_map")
+            params["gcs"]          = c8.number_input("GCS (/15)", 3, 15, 15, key="sep_gcs")
+            params["on_ventilator"]= st.checkbox("Ventilation mécanique", key="sep_vent")
+            params["on_o2"]        = st.checkbox("O2 supplémentaire", key="sep_o2")
+
+        with tab_bio:
+            c1, c2, c3 = st.columns(3)
+            params["wbc"]           = c1.number_input("Leuco. (G/L)", 0.5, 50.0, 8.0, 0.1, key="sep_wbc")
+            params["neutrophils"]   = c2.number_input("Neutro. (G/L)", 0.1, 40.0, 5.5, 0.1, key="sep_neu")
+            params["platelets"]     = c3.number_input("Plaq. (G/L)", 5.0, 600.0, 200.0, 5.0, key="sep_plt")
+            c4, c5, c6 = st.columns(3)
+            params["lactate"]       = c4.number_input("Lactate (mmol/L)", 0.1, 20.0, 1.0, 0.1, key="sep_lac")
+            params["crp"]           = c5.number_input("CRP (mg/L)", 0.0, 500.0, 5.0, 1.0, key="sep_crp")
+            params["procalcitonin"] = c6.number_input("PCT (ng/mL)", 0.01, 100.0, 0.1, 0.05, key="sep_pct")
+            c7, c8, c9 = st.columns(3)
+            params["creatinine"]    = c7.number_input("Créat. (µmol/L)", 30.0, 2000.0, 88.0, 5.0, key="sep_cr")
+            params["bilirubin"]     = c8.number_input("Bilirub. (µmol/L)", 0.0, 500.0, 17.0, 1.0, key="sep_bil")
+            params["inr"]           = c9.number_input("INR", 0.5, 10.0, 1.0, 0.1, key="sep_inr")
+            c10, c11 = st.columns(2)
+            params["urea"]          = c10.number_input("Urée (mmol/L)", 1.0, 50.0, 5.0, 0.5, key="sep_urea")
+            params["pao2_fio2"]     = c11.number_input("PaO2/FiO2", 50.0, 600.0, 400.0, 5.0, key="sep_pf")
+            params["albumin"]       = st.number_input("Albumine (g/L)", 10.0, 60.0, 40.0, 1.0, key="sep_alb")
+            params["d_dimers"]      = st.number_input("D-Dimères (µg/mL FEU)", 0.0, 50.0, 0.3, 0.1, key="sep_dd")
+
+        with tab_patient:
+            c1, c2 = st.columns(2)
+            params["age"]  = c1.number_input("Âge (ans)", 0, 120, 50, key="sep_age")
+            params["sex"]  = c2.selectbox("Sexe", ["M","F"], key="sep_sex")
+            params["icu_admission"]      = st.checkbox("Admission en réanimation", key="sep_icu")
+            params["blood_cultures_done"]= st.checkbox("Hémocultures réalisées", key="sep_bc")
+            params["antibiotics_given"]  = st.checkbox("Antibiotiques initiés", key="sep_abx")
+            params["fluid_resuscitation"]= st.checkbox("Remplissage 30 mL/kg réalisé", key="sep_fluid")
+            params["vasopressors"]       = st.checkbox("Vasopresseurs en cours", key="sep_vp")
+            params["norepinephrine"]     = st.number_input("Noradrénaline (µg/kg/min)", 0.0, 5.0, 0.0, 0.01, key="sep_ne")
+            st.markdown("**Comorbidités**")
+            c3, c4, c5 = st.columns(3)
+            params["diabetes"]          = c3.checkbox("Diabète", key="sep_dm")
+            params["immunocompromised"] = c4.checkbox("Immunodépression", key="sep_imm")
+            params["malignancy"]        = c5.checkbox("Cancer actif", key="sep_mal")
+            c6, c7 = st.columns(2)
+            params["chronic_renal"]     = c6.checkbox("IRC", key="sep_ckd")
+            params["cirrhosis"]         = c7.checkbox("Cirrhose", key="sep_cirr")
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        if st.button("🚨 Analyser le risque sepsis", use_container_width=True, key="btn_sepsis"):
+            with st.spinner("🧠 SepsisPredict AI — SOFA · qSOFA · NEWS2 · APACHE II…"):
+                time.sleep(0.3)
+                result  = predict_sepsis(params)
+                alerts  = generate_sepsis_alerts(
+                    result.get("prediction",""),
+                    result.get("confidence", 0),
+                    params,
+                    result.get("clinical_scores", {}),
+                    result.get("critical_biomarkers", []),
+                )
+                st.session_state["sepsis_result"] = result
+                st.session_state["sepsis_alerts"] = alerts
+                try:
+                    pdf = build_sepsis_pdf_report(result, alerts,
+                        patient_id=f"KANEA-{result.get('request_id','')[:8]}")
+                    st.session_state["sepsis_pdf"] = pdf
+                except Exception:
+                    pass
+
+    # ── RÉSULTATS ────────────────────────────────────────────────────────────
+    with col_result:
+        res     = st.session_state.get("sepsis_result") or {}
+        alerts  = st.session_state.get("sepsis_alerts") or []
+        pdf     = st.session_state.get("sepsis_pdf")
+
+        if res.get("status") == "success":
+            pred    = res["prediction"]
+            conf    = res["confidence"]
+            urgency = res["clinical_profile"]["urgency"]
+            color   = res["clinical_profile"]["color"]
+            action  = res["recommended_action"]
+            risk_sc = res["risk_score"]
+            safety  = res["clinical_safety"]
+
+            # Résultat principal
+            st.markdown(
+                f"""<div style="background:{color}14;border:2px solid {color}66;
+                border-radius:16px;padding:1.1rem 1.3rem;margin-bottom:.8rem;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                  <div>
+                    <div style="font-size:1.4rem;font-weight:900;color:{color};">🚨 {pred}</div>
+                    <div style="font-size:.82rem;color:#5E7A8A;margin-top:3px;">
+                      Confiance : <b>{conf:.1%}</b> &nbsp;·&nbsp; Risque : <b>{risk_sc:.1%}</b>
+                    </div>
+                  </div>
+                  <span style="background:{color}22;border:1px solid {color}55;border-radius:999px;
+                  padding:.3rem .9rem;font-size:.78rem;font-weight:800;color:{color};">{urgency}</span>
+                </div>
+                <div style="margin-top:.7rem;background:rgba(255,255,255,.8);border-radius:10px;
+                padding:.5rem .8rem;border:1px solid #DDE8EE;">
+                  <div style="font-size:.72rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;">Action recommandée</div>
+                  <div style="font-size:.84rem;color:#1A2B3C;font-weight:600;">💡 {action}</div>
+                </div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+            if safety.get("level") == "critical":
+                st.error(f"🚨 {safety['message']}", icon="🏥")
+            elif safety.get("level") == "warning":
+                st.warning(f"⚠️ {safety['message']}")
+
+            # Alertes
+            alert_summary = get_alert_summary(alerts) if alerts else {}
+            if alerts:
+                with st.expander(f"🔔 Alertes médicales — {alert_summary.get('total_alerts',0)} alertes "
+                                  f"({alert_summary.get('highest_level','INFO')})", expanded=True):
+                    for a in alerts[:6]:
+                        lvl_colors = {"CRITICAL":"#FDECEA","HIGH":"#FEF0E7","WARNING":"#FEF9E7","INFO":"#EBF4FD"}
+                        lvl_borders= {"CRITICAL":"#922B21","HIGH":"#E74C3C","WARNING":"#E67E22","INFO":"#2E86DE"}
+                        st.markdown(
+                            f"""<div style="background:{lvl_colors.get(a['level'],'#F7F9FC')};
+                            border-left:4px solid {lvl_borders.get(a['level'],'#5E7A8A')};
+                            border-radius:0 10px 10px 0;padding:.5rem .8rem;margin-bottom:.4rem;">
+                            <div style="font-size:.82rem;font-weight:700;color:#1A2B3C;">
+                              {a.get('icon','')} <b>[{a['level']}]</b> {a['title']}</div>
+                            <div style="font-size:.75rem;color:#5E7A8A;margin-top:.2rem;">{a['message'][:100]}</div>
+                            <div style="font-size:.72rem;color:#1A2B3C;margin-top:.2rem;font-style:italic;">
+                              → {a['clinical_action'][:80]}</div>
+                            </div>""",
+                            unsafe_allow_html=True,
+                        )
+
+            # Scores clés (SOFA, qSOFA, NEWS2)
+            scores = res.get("clinical_scores", {})
+            sofa  = scores.get("sofa", {})
+            qsofa = scores.get("qsofa", {})
+            news2 = scores.get("news2", {})
+            mews  = scores.get("mews", {})
+
+            if sofa or qsofa or news2:
+                sc1, sc2, sc3, sc4 = st.columns(4)
+                for col_s, name, val, max_val, c in [
+                    (sc1, "SOFA",  sofa.get("total", 0),  24,  "#C0392B"),
+                    (sc2, "qSOFA", qsofa.get("score", 0),  3,  "#E74C3C"),
+                    (sc3, "NEWS2", news2.get("total", 0),  20, "#E67E22"),
+                    (sc4, "MEWS",  mews.get("score", 0),   14, "#F39C12"),
+                ]:
+                    with col_s:
+                        st.markdown(
+                            f"""<div style="background:#FFF;border-radius:12px;padding:.7rem .6rem;
+                            text-align:center;border-top:3px solid {c};border:1px solid #DDE8EE;
+                            box-shadow:0 2px 8px rgba(0,0,0,.06);">
+                            <div style="font-size:.7rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;">{name}</div>
+                            <div style="font-size:1.6rem;font-weight:900;color:{c};">{val}</div>
+                            <div style="font-size:.65rem;color:#8AABB8;">/{max_val}</div>
+                            </div>""",
+                            unsafe_allow_html=True,
+                        )
+
+            st.markdown("<div style='height:.5rem'></div>", unsafe_allow_html=True)
+
+            # SHAP horizontal bars (Plotly)
+            fi = res.get("explainability", {}).get("feature_importance", {})
+            if fi:
+                top8 = sorted(fi.items(), key=lambda x: x[1])[-8:]
+                _bf = go.Figure(go.Bar(
+                    x=[v for _, v in top8],
+                    y=[k for k, _ in top8],
+                    orientation="h",
+                    marker=dict(
+                        color=[v for _, v in top8],
+                        colorscale=[[0,"#27AE60"],[0.5,"#E67E22"],[1,"#C0392B"]],
+                        showscale=False,
+                    ),
+                    text=[f"{v:.0f}%" for _, v in top8],
+                    textposition="outside",
+                    textfont=dict(size=10, color="#1A2B3C"),
+                ))
+                _bf.update_layout(
+                    height=220, xaxis=dict(range=[0,115],showgrid=False,visible=False),
+                    yaxis=dict(tickfont=dict(size=10,color="#1A2B3C")),
+                    margin=dict(l=5,r=45,t=5,b=5),
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    showlegend=False, font_family="Inter",
+                    title=dict(text="SHAP — Variables déterminantes", font=dict(size=11, color="#5E7A8A")),
+                )
+                st.plotly_chart(_bf, use_container_width=True)
+
+            # Risque mortalité multi-horizons
+            mort = res.get("mortality_risk", {})
+            if mort:
+                with st.expander("📊 Risque de mortalité multi-horizons"):
+                    m_cols = st.columns(len(mort))
+                    for mc, (horizon, risk) in zip(m_cols, mort.items()):
+                        rc = "#C0392B" if risk > 0.5 else ("#E67E22" if risk > 0.25 else "#27AE60")
+                        with mc:
+                            st.markdown(
+                                f"""<div style="text-align:center;background:#FFF;border-radius:12px;
+                                padding:.6rem .3rem;border-top:3px solid {rc};border:1px solid #DDE8EE;">
+                                <div style="font-size:.72rem;font-weight:700;color:#5E7A8A;">{horizon}</div>
+                                <div style="font-size:1.3rem;font-weight:900;color:{rc};">{risk:.1%}</div>
+                                </div>""",
+                                unsafe_allow_html=True,
+                            )
+
+            # Organes défaillants
+            organ_risk = res.get("organ_failure_risk", {})
+            critical_organs = [k for k, v in organ_risk.items() if v == "Élevé"]
+            if critical_organs:
+                st.markdown(
+                    f"""<div style="background:#FDECEA;border-left:4px solid #C0392B;
+                    border-radius:0 10px 10px 0;padding:.6rem .9rem;margin-top:.4rem;">
+                    <div style="font-size:.78rem;font-weight:700;color:#C0392B;">🔴 Organes en défaillance sévère</div>
+                    <div style="font-size:.82rem;color:#1A2B3C;margin-top:.2rem;">
+                    {' · '.join(o.title() for o in critical_organs)}</div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+            # Biomarqueurs critiques
+            bio_flags = res.get("critical_biomarkers", [])
+            if bio_flags:
+                with st.expander(f"🧪 Biomarqueurs critiques ({len(bio_flags)})"):
+                    for b in bio_flags:
+                        st.markdown(
+                            f"""<div style="display:flex;align-items:center;gap:.5rem;
+                            padding:.25rem 0;border-bottom:1px solid #EEF2F6;">
+                            <span style="font-size:.82rem;flex:1;font-weight:600;">{b['biomarker']}</span>
+                            <span style="font-size:.82rem;color:#1A2B3C;">{b['value']} {b['unit']}</span>
+                            <span style="font-size:.72rem;font-weight:700;color:{b['color']};
+                            background:{b['color']}18;border-radius:4px;padding:2px 7px;">{b['status']}</span>
+                            </div>""",
+                            unsafe_allow_html=True,
+                        )
+
+            # PDF + JSON
+            st.markdown("<div style='height:.5rem'></div>", unsafe_allow_html=True)
+            if pdf:
+                st.download_button(
+                    "📥 Télécharger le rapport PDF médical",
+                    data=pdf,
+                    file_name=f"SepsisPredict_{res.get('request_id','')[:8]}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="dl_sepsis_pdf",
+                )
+            else:
+                html_r = build_sepsis_html_report(res, alerts)
+                st.download_button(
+                    "📥 Télécharger rapport HTML",
+                    data=html_r.encode("utf-8"),
+                    file_name="SepsisPredict_rapport.html",
+                    mime="text/html",
+                    use_container_width=True,
+                    key="dl_sepsis_html",
+                )
+
+            with st.expander("🔍 JSON complet"):
+                st.json({k:v for k,v in res.items() if k not in ("explainability",)})
+
+        else:
+            st.markdown(
+                """<div style="border:2px dashed #DDE8EE;border-radius:14px;padding:3rem;
+                text-align:center;color:#8AABB8;">
+                <div style="font-size:2.5rem;margin-bottom:.5rem;">🚨</div>
+                <div style="font-size:.92rem;">Remplir les paramètres cliniques et lancer l'analyse</div>
+                <div style="font-size:.78rem;margin-top:.3rem;opacity:.7;">
+                Signes vitaux · Biologie · Antécédents patient</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+        st.markdown(
+            "<div class='disclaimer' style='margin-top:.8rem;'>⚠️ SepsisPredict AI — Outil d'aide à la "
+            "décision. Validation par un médecin réanimateur obligatoire.</div>",
+            unsafe_allow_html=True,
+        )
+
+
 def page_maladies(sous_page: str) -> None:
     _MODULE_MAP = {
         "DermAI":            "derm",
@@ -4021,18 +4337,19 @@ def page_maladies(sous_page: str) -> None:
         "GastroAI":          "gastro",
         "HistoPath AI":      "histopath",
         "OsteoDetect AI":    "osteo",
-        "SepsisPredict AI":  "sepsis",
+        # SepsisPredict AI géré via dispatch
         "HepatoScan AI":     "hepato",
         "NephroAI":          "nephro",
         "HematoVision AI":   "hemato",
         "GynoCare AI":       "gyno",
     }
     dispatch = {
-        "Paludisme":    _render_paludisme,
-        "Nutrition":    _render_nutrition,
-        "Médico-légal": _render_medicolegal,
-        "Cancer sein":  _render_breast_cancer,
-        "PulmoScan AI": _render_pulmoscan,
+        "Paludisme":        _render_paludisme,
+        "Nutrition":        _render_nutrition,
+        "Médico-légal":     _render_medicolegal,
+        "Cancer sein":      _render_breast_cancer,
+        "PulmoScan AI":     _render_pulmoscan,
+        "SepsisPredict AI": _render_sepsis,
     }
     if sous_page in dispatch:
         dispatch[sous_page]()

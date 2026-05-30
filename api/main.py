@@ -404,6 +404,125 @@ async def generate_pulmoscan_report(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# MODULE 9 — SEPSISPREDICT AI v2.0
+# ═══════════════════════════════════════════════════════════════════════════════
+
+try:
+    from modules.sepsis_ai.predictor import predict_sepsis
+    from modules.sepsis_ai.alerts import generate_sepsis_alerts, get_alert_summary
+    from modules.sepsis_ai.report import build_sepsis_pdf_report
+    _SEPSIS_OK = True
+    log.info("SepsisPredict AI v2.0 chargé — SOFA · qSOFA · NEWS2 · APACHE II")
+except Exception as _sep_err:
+    _SEPSIS_OK = False
+    log.warning("SepsisPredict AI indisponible : %s", _sep_err)
+
+
+@app.post("/predict/sepsis", tags=["SepsisPredict AI"])
+async def predict_sepsis_route(params: dict = {}) -> dict:
+    """
+    SepsisPredict AI v2.0 — Analyse complète sepsis sur paramètres cliniques.
+    Retourne prédiction, SOFA/qSOFA/NEWS2/APACHE II, risque mortalité, alertes.
+    """
+    if not _SEPSIS_OK:
+        from fastapi import HTTPException
+        raise HTTPException(503, "SepsisPredict AI non disponible")
+    return predict_sepsis(params)
+
+
+@app.post("/predict/sepsis/scores", tags=["SepsisPredict AI"])
+async def predict_sepsis_scores(params: dict = {}) -> dict:
+    """Calcule uniquement les scores cliniques (SOFA, qSOFA, NEWS2, APACHE II, MEWS, SSC)."""
+    if not _SEPSIS_OK:
+        from fastapi import HTTPException
+        raise HTTPException(503, "SepsisPredict AI non disponible")
+    result = predict_sepsis(params)
+    return {
+        "request_id":     result.get("request_id"),
+        "prediction":     result.get("prediction"),
+        "clinical_scores":result.get("clinical_scores"),
+        "risk_score":     result.get("risk_score"),
+        "processing_ms":  result.get("processing_ms"),
+        "status":         result.get("status"),
+    }
+
+
+@app.post("/predict/sepsis/alerts", tags=["SepsisPredict AI"])
+async def predict_sepsis_alerts(params: dict = {}) -> dict:
+    """Génère les alertes médicales (INFO/WARNING/HIGH/CRITICAL) pour les paramètres donnés."""
+    if not _SEPSIS_OK:
+        from fastapi import HTTPException
+        raise HTTPException(503, "SepsisPredict AI non disponible")
+    result = predict_sepsis(params)
+    alerts = generate_sepsis_alerts(
+        result.get("prediction",""),
+        result.get("confidence", 0),
+        params,
+        result.get("clinical_scores", {}),
+        result.get("critical_biomarkers", []),
+    )
+    return {
+        "request_id":    result.get("request_id"),
+        "prediction":    result.get("prediction"),
+        "alerts":        alerts,
+        "alert_summary": get_alert_summary(alerts),
+        "processing_ms": result.get("processing_ms"),
+        "status":        result.get("status"),
+    }
+
+
+@app.post("/predict/sepsis/mortality", tags=["SepsisPredict AI"])
+async def predict_sepsis_mortality(params: dict = {}) -> dict:
+    """Risque de mortalité multi-horizons : 24h, 48h, 7j, 28j + défaillance organes."""
+    if not _SEPSIS_OK:
+        from fastapi import HTTPException
+        raise HTTPException(503, "SepsisPredict AI non disponible")
+    result = predict_sepsis(params)
+    return {
+        "request_id":         result.get("request_id"),
+        "prediction":         result.get("prediction"),
+        "confidence":         result.get("confidence"),
+        "mortality_risk":     result.get("mortality_risk"),
+        "organ_failure_risk": result.get("organ_failure_risk"),
+        "septic_shock_risk":  result.get("septic_shock_risk"),
+        "clinical_safety":    result.get("clinical_safety"),
+        "processing_ms":      result.get("processing_ms"),
+        "status":             result.get("status"),
+    }
+
+
+@app.post("/sepsis/report", tags=["SepsisPredict AI"])
+async def generate_sepsis_report(
+    params: dict = {},
+    patient_id: str = "KANEA-AUTO",
+    examiner: str = "KANÉA System",
+) -> dict:
+    """Analyse complète + rapport PDF médical SepsisPredict AI (base64)."""
+    import base64
+    if not _SEPSIS_OK:
+        from fastapi import HTTPException
+        raise HTTPException(503, "SepsisPredict AI non disponible")
+    result = predict_sepsis(params)
+    alerts = generate_sepsis_alerts(
+        result.get("prediction",""), result.get("confidence", 0),
+        params, result.get("clinical_scores", {}), result.get("critical_biomarkers", []),
+    )
+    pdf_b64 = None
+    try:
+        pdf_bytes = build_sepsis_pdf_report(result, alerts, patient_id=patient_id, examiner=examiner)
+        if pdf_bytes:
+            pdf_b64 = base64.b64encode(pdf_bytes).decode("ascii")
+    except Exception as exc:
+        log.warning("SepsisPredict PDF failed: %s", exc)
+    return {
+        **{k: v for k, v in result.items() if k not in ("explainability",)},
+        "alerts":         alerts,
+        "pdf_report_b64": pdf_b64,
+        "pdf_available":  pdf_b64 is not None,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # MODULES 6–17 — SCAFFOLD AI MODULES
 # ═══════════════════════════════════════════════════════════════════════════════
 
