@@ -4328,9 +4328,315 @@ def _render_sepsis() -> None:
         )
 
 
+def _render_derm() -> None:
+    """DermAI v2.0 — Interface clinique dermatologie (25 pathologies)."""
+    from modules.derm_ai.predictor import predict_derm, CLASSES as DERM_CLASSES
+    from modules.derm_ai.report import build_derm_pdf_report, build_derm_html_report
+
+    for _k in ("derm_result", "derm_pdf", "derm_img_name"):
+        if _k not in st.session_state:
+            st.session_state[_k] = None
+
+    st.markdown(
+        """<div class="page-header" style="background:linear-gradient(135deg,#6C1A5A,#D91E7A);">
+            <h1>🩺 DermAI — Module 6 · v2.0</h1>
+            <p>25 pathologies cutanées · EfficientNet-B4 · Grad-CAM · ABCDE · Breslow · TNM · PASI · SCORAD</p>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    col_info, col_upload = st.columns([1, 1.5], gap="large")
+
+    with col_info:
+        # Catégories de maladies
+        _cats = {
+            "🔴 Cancers": ["Mélanome","Carcinome basocellulaire","Carcinome épidermoïde","Kératose actinique","Carcinome de Merkel"],
+            "🟠 Inflammatoires": ["Psoriasis","Eczéma atopique","Dermatite de contact","Rosacée","Lichen plan"],
+            "🟡 Infectieuses": ["Teigne","Candidose cutanée","Impétigo","Gale","Herpès","Zona","Verrues virales"],
+            "🔵 Pigmentaires": ["Vitiligo","Mélasman","Hyperpigmentation post-inflammatoire"],
+            "🟣 Auto-immunes": ["Lupus cutané","Sclérodermie","Dermatomyosite"],
+            "🟢 Bénignes": ["Nævus bénin","Kératose séborrhéique"],
+        }
+        _cat_colors = {
+            "🔴 Cancers": "#922B21", "🟠 Inflammatoires": "#E67E22",
+            "🟡 Infectieuses": "#CA8B00", "🔵 Pigmentaires": "#2E86DE",
+            "🟣 Auto-immunes": "#884EA0", "🟢 Bénignes": "#27AE60",
+        }
+        for cat, diseases in _cats.items():
+            c = _cat_colors.get(cat, "#5E7A8A")
+            diseases_html = " · ".join(diseases)
+            st.markdown(
+                f"""<div style="margin-bottom:.5rem;padding:.5rem .8rem;background:#FFF;
+                border-radius:10px;border-left:4px solid {c};border:1px solid #EEF2F6;
+                box-shadow:0 1px 6px rgba(0,0,0,.05);">
+                <div style="font-size:.72rem;font-weight:700;color:{c};margin-bottom:.2rem;">{cat}</div>
+                <div style="font-size:.74rem;color:#5E7A8A;line-height:1.6;">{diseases_html}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+        st.markdown(
+            """<div class="section-card" style="margin-top:.6rem;">
+                <div class="section-title">📊 Scores calculés</div>
+                <div style="font-size:.8rem;color:#5E7A8A;line-height:1.9;">
+                🔸 <b>ABCDE</b> — Asymétrie, Bords, Couleur, Diamètre, Évolution<br>
+                🔸 <b>Breslow + Clark</b> — Épaisseur et niveau invasion mélanome<br>
+                🔸 <b>TNM AJCC 8e</b> — Staging mélanome<br>
+                🔸 <b>PASI</b> — Psoriasis Area and Severity Index<br>
+                🔸 <b>SCORAD</b> — Eczéma atopique<br>
+                🔸 <b>EASI · GAGS · VASI</b> — Eczéma / Acné / Vitiligo
+                </div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+
+    with col_upload:
+        st.markdown("<div class='section-card'><div class='section-title'>📤 Analyser une image cutanée</div>", unsafe_allow_html=True)
+
+        uploaded = st.file_uploader(
+            "Importer une image dermatologique / dermoscopique (PNG, JPG)",
+            type=["png", "jpg", "jpeg"], key="derm_upload",
+        )
+
+        c_params = st.columns(2)
+        diameter_mm = c_params[0].number_input("Diamètre estimé (mm)", 0.5, 50.0, 6.0, 0.5, key="derm_diam")
+        evolution   = c_params[1].checkbox("Évolution récente documentée", key="derm_evol")
+
+        if uploaded:
+            st.image(uploaded, caption=uploaded.name, use_container_width=True)
+
+        if st.button("🩺 Lancer l'analyse DermAI", use_container_width=True, key="btn_derm"):
+            if not uploaded:
+                st.warning("⚠️ Veuillez importer une image.")
+            else:
+                with st.spinner("🧠 DermAI — EfficientNet-B4 · ABCDE · Grad-CAM…"):
+                    time.sleep(0.4)
+                    suffix = Path(uploaded.name).suffix or ".jpg"
+                    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                        tmp.write(uploaded.getbuffer()); temp_path = tmp.name
+                    result = predict_derm(image_path=temp_path,
+                                         params={"diameter_mm": diameter_mm, "evolution": evolution})
+                    st.session_state["derm_result"]   = result
+                    st.session_state["derm_img_name"] = uploaded.name
+                    try:
+                        pdf = build_derm_pdf_report(result,
+                              patient_id=f"KANEA-{result.get('request_id','')[:8]}")
+                        st.session_state["derm_pdf"] = pdf
+                    except Exception:
+                        pass
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # ── RÉSULTATS ────────────────────────────────────────────────────────
+        res = st.session_state.get("derm_result") or {}
+        if res.get("status") == "success":
+            pred    = res["prediction"]
+            conf    = res["confidence"]
+            urgency = res["clinical_profile"]["urgency"]
+            color   = res["clinical_profile"]["color"]
+            action  = res["recommended_action"]
+            pattern = res["clinical_profile"]["pattern"]
+            dermoscopy = res["clinical_profile"]["dermoscopy"]
+            safety  = res["clinical_safety"]
+
+            # Résultat principal
+            st.markdown(
+                f"""<div style="background:{color}12;border:1.5px solid {color}55;
+                border-radius:16px;padding:1.1rem 1.3rem;margin-top:.8rem;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.5rem;">
+                  <div>
+                    <div style="font-size:1.4rem;font-weight:900;color:{color};">🩺 {pred}</div>
+                    <div style="font-size:.78rem;color:#5E7A8A;margin-top:3px;">
+                      Catégorie : <b>{res['clinical_profile']['category']}</b> &nbsp;·&nbsp;
+                      CIM-10 : <b>{res['clinical_profile']['icd10']}</b> &nbsp;·&nbsp;
+                      Confiance : <b>{conf:.1%}</b>
+                    </div>
+                  </div>
+                  <span style="background:{color}22;border:1px solid {color}55;border-radius:999px;
+                  padding:.3rem .9rem;font-size:.78rem;font-weight:800;color:{color};">{urgency}</span>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.7rem;">
+                  <div style="background:rgba(255,255,255,.85);border-radius:10px;padding:.5rem .8rem;border:1px solid #DDE8EE;">
+                    <div style="font-size:.68rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;">Pattern clinique</div>
+                    <div style="font-size:.8rem;color:#1A2B3C;margin-top:.2rem;">{pattern}</div>
+                  </div>
+                  <div style="background:rgba(255,255,255,.85);border-radius:10px;padding:.5rem .8rem;border:1px solid #DDE8EE;">
+                    <div style="font-size:.68rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;">Dermoscopie</div>
+                    <div style="font-size:.78rem;color:#1A2B3C;margin-top:.2rem;">{dermoscopy[:70]}</div>
+                  </div>
+                </div>
+                <div style="margin-top:.5rem;background:rgba(255,255,255,.8);border-radius:10px;
+                padding:.5rem .8rem;border:1px solid #DDE8EE;">
+                  <div style="font-size:.68rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;">Action recommandée</div>
+                  <div style="font-size:.84rem;color:#1A2B3C;font-weight:600;">💡 {action}</div>
+                </div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+            if safety.get("level") == "critical":
+                st.error(f"🚨 {safety['message']}", icon="⚕️")
+            elif safety.get("level") == "warning":
+                st.warning(f"⚠️ {safety['message']}")
+
+            # Grad-CAM
+            hm = res.get("explainability", {}).get("heatmap_b64")
+            if hm:
+                st.markdown("**🔥 Grad-CAM — Localisation dermoscopique**")
+                st.markdown(
+                    f'<img src="data:image/png;base64,{hm}" '
+                    'style="width:100%;border-radius:12px;border:1px solid #DDE8EE;" '
+                    'alt="Grad-CAM DermAI"/>',
+                    unsafe_allow_html=True,
+                )
+
+            # Scores cliniques
+            scores = res.get("clinical_scores", {})
+            abcde   = scores.get("abcde", {})
+            breslow = scores.get("breslow_clark", {})
+            tnm_s   = scores.get("tnm", {})
+            scorad  = scores.get("scorad", {})
+
+            if abcde or breslow or tnm_s or scorad:
+                with st.expander("📊 Scores cliniques détaillés"):
+                    if abcde:
+                        st.markdown(f"**ABCDE :** Score TDS `{abcde.get('total_score','—')}` — "
+                                    f"Risque **{abcde.get('risk','—')}** — Probabilité malignité : {abcde.get('probability','—')}")
+                        st.markdown(f"→ {abcde.get('recommendation','—')}")
+                    if breslow:
+                        st.markdown(f"**Breslow :** `{breslow.get('breslow_mm','—')} mm` — "
+                                    f"{breslow.get('category','—')} — Clark niveau {breslow.get('clark_level','—')} — "
+                                    f"Stade {breslow.get('t_stage','—')} — Survie 5 ans : **{breslow.get('survival','—')}**")
+                        if breslow.get("sentinel_node_biopsy"):
+                            st.info("💉 Biopsie ganglion sentinelle recommandée", icon="🔬")
+                    if tnm_s:
+                        st.markdown(f"**TNM AJCC 8e :** T{tnm_s.get('T','?')} N{tnm_s.get('N','?')} "
+                                    f"M{tnm_s.get('M','?')} → Stade **{tnm_s.get('stage','—')}** — "
+                                    f"Survie 5 ans : {tnm_s.get('survival','—')}")
+                        st.markdown(f"→ {tnm_s.get('treatment','—')}")
+                    if scorad:
+                        st.markdown(f"**SCORAD :** {scorad.get('total','—')}/103 — **{scorad.get('severity','—')}**")
+                        st.markdown(f"→ {scorad.get('treatment','—')}")
+
+            # Jauge confiance + barres différentiel Plotly
+            probs = res.get("probabilities", {})
+            if probs:
+                g_col, b_col = st.columns([1, 2], gap="medium")
+                with g_col:
+                    _gf = go.Figure(go.Indicator(
+                        mode="gauge+number",
+                        value=round(conf * 100, 1),
+                        number={"suffix": "%", "font": {"size": 22, "color": color}},
+                        gauge={"axis": {"range": [0, 100]}, "bar": {"color": color, "thickness": 0.28},
+                               "bgcolor": "rgba(0,0,0,0)", "bordercolor": "rgba(0,0,0,0)",
+                               "steps": [{"range":[0,50],"color":"rgba(231,76,60,0.08)"},
+                                         {"range":[50,75],"color":"rgba(243,156,18,0.08)"},
+                                         {"range":[75,100],"color":"rgba(39,174,96,0.08)"}],
+                               "threshold":{"line":{"color":"#1A2B3C","width":2},"thickness":0.75,"value":round(conf*100,1)}},
+                        title={"text":"Confiance","font":{"size":11,"color":"#5E7A8A"}},
+                    ))
+                    _gf.update_layout(height=180, margin=dict(l=8,r=8,t=26,b=8),
+                                      paper_bgcolor="rgba(0,0,0,0)", font_family="Inter")
+                    st.plotly_chart(_gf, use_container_width=True)
+
+                with b_col:
+                    top8 = sorted(probs.items(), key=lambda x: x[1])[-8:]
+                    _bf = go.Figure(go.Bar(
+                        x=[round(p*100,1) for _,p in top8],
+                        y=[c for c,_ in top8],
+                        orientation="h",
+                        marker_color=[color]*len(top8),
+                        text=[f"{p*100:.1f}%" for _,p in top8],
+                        textposition="outside",
+                        textfont=dict(size=10, color="#1A2B3C"),
+                    ))
+                    _bf.update_layout(
+                        height=200, xaxis=dict(range=[0,110],showgrid=False,visible=False),
+                        yaxis=dict(tickfont=dict(size=10, color="#1A2B3C")),
+                        margin=dict(l=5,r=45,t=5,b=5),
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        showlegend=False, font_family="Inter",
+                        title=dict(text="Top 8 probabilités", font=dict(size=11, color="#5E7A8A")),
+                    )
+                    st.plotly_chart(_bf, use_container_width=True)
+
+            # Quantification
+            quant = res.get("quantification", {})
+            if quant.get("lesion_coverage_pct", 0) > 0:
+                qc = "#C0392B" if quant["lesion_coverage_pct"] > 50 else "#E67E22" if quant["lesion_coverage_pct"] > 20 else "#27AE60"
+                q1, q2, q3 = st.columns(3)
+                for col_q, label, val, unit in [
+                    (q1, "Surface estimée", quant.get("lesion_coverage_pct",0), "%"),
+                    (q2, "Asymétrie", round(quant.get("asymmetry_index",0)*100,1), "pts"),
+                    (q3, "Hétérogénéité", round(quant.get("color_heterogeneity",0)*100,1), "pts"),
+                ]:
+                    with col_q:
+                        st.markdown(
+                            f"""<div style="text-align:center;background:#FFF;border-radius:12px;
+                            padding:.6rem .4rem;border-top:3px solid {qc};border:1px solid #DDE8EE;">
+                            <div style="font-size:.68rem;font-weight:700;color:#5E7A8A;">{label}</div>
+                            <div style="font-size:1.3rem;font-weight:900;color:{qc};">{val:.1f}<span style="font-size:.7rem">{unit}</span></div>
+                            </div>""",
+                            unsafe_allow_html=True,
+                        )
+
+            # Différentiel
+            diff = res.get("differential_diagnosis", [])
+            if len(diff) > 1:
+                with st.expander("🔍 Diagnostic différentiel complet"):
+                    for d in diff:
+                        dc = "#5E7A8A"
+                        st.markdown(
+                            f"""<div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid #EEF2F6;">
+                            <span style="flex:1;font-size:.85rem;">{d['class']}</span>
+                            <span style="font-size:.75rem;color:#8AABB8;">{d.get('category','—')}</span>
+                            <b style="color:{dc};">{d['probability']:.1%}</b>
+                            </div>""",
+                            unsafe_allow_html=True,
+                        )
+
+            # PDF + JSON
+            st.markdown("<div style='height:.5rem'></div>", unsafe_allow_html=True)
+            pdf = st.session_state.get("derm_pdf")
+            if pdf:
+                st.download_button(
+                    "📥 Télécharger le rapport PDF médical",
+                    data=pdf,
+                    file_name=f"DermAI_{st.session_state.get('derm_img_name','rapport')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="dl_derm_pdf",
+                )
+            else:
+                html_r = build_derm_html_report(res)
+                st.download_button("📥 Rapport HTML", data=html_r.encode("utf-8"),
+                                   file_name="DermAI_rapport.html", mime="text/html",
+                                   use_container_width=True, key="dl_derm_html")
+
+            with st.expander("🔍 JSON complet"):
+                st.json({k:v for k,v in res.items() if k not in ("explainability",)})
+
+        else:
+            st.markdown(
+                """<div style="border:2px dashed #DDE8EE;border-radius:14px;padding:2.5rem;
+                text-align:center;color:#8AABB8;">
+                <div style="font-size:2.5rem;margin-bottom:.5rem;">🩺</div>
+                <div style="font-size:.92rem;">Importer une image dermatologique ou dermoscopique</div>
+                <div style="font-size:.78rem;margin-top:.3rem;opacity:.7;">PNG · JPG · JPEG · Photos cliniques ou dermoscope</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+        st.markdown(
+            "<div class='disclaimer' style='margin-top:.8rem;'>⚠️ DermAI — Outil d'aide au diagnostic. "
+            "Toute lésion suspecte doit être évaluée par un dermatologue qualifié.</div>",
+            unsafe_allow_html=True,
+        )
+
+
 def page_maladies(sous_page: str) -> None:
     _MODULE_MAP = {
-        "DermAI":            "derm",
+        # DermAI géré via dispatch
         "RetinaVision AI":   "retina",
         "CardioSense AI":    "cardio",
         "NeuroVision AI":    "neuro",
@@ -4350,6 +4656,7 @@ def page_maladies(sous_page: str) -> None:
         "Cancer sein":      _render_breast_cancer,
         "PulmoScan AI":     _render_pulmoscan,
         "SepsisPredict AI": _render_sepsis,
+        "DermAI":           _render_derm,
     }
     if sous_page in dispatch:
         dispatch[sous_page]()

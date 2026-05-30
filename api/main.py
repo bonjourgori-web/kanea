@@ -404,6 +404,112 @@ async def generate_pulmoscan_report(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# MODULE 6 — DERMAI v2.0 (25 pathologies dermatologiques)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+try:
+    from modules.derm_ai.predictor import predict_derm
+    from modules.derm_ai.report import build_derm_pdf_report
+    _DERM_OK = True
+    log.info("DermAI v2.0 chargé — 25 pathologies dermatologiques")
+except Exception as _derm_err:
+    _DERM_OK = False
+    log.warning("DermAI indisponible : %s", _derm_err)
+
+
+@app.post("/predict/derm/upload", tags=["DermAI"])
+async def predict_derm_upload(file: UploadFile = File(...)) -> dict:
+    """DermAI v2.0 — Analyse dermatologique complète · 25 pathologies · Grad-CAM · ABCDE · Breslow · TNM."""
+    if not _DERM_OK:
+        from fastapi import HTTPException
+        raise HTTPException(503, "DermAI non disponible")
+    suffix = Path(file.filename or "upload.jpg").suffix or ".jpg"
+    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read()); temp_path = tmp.name
+    return predict_derm(image_path=temp_path)
+
+
+@app.post("/predict/derm/scores", tags=["DermAI"])
+async def predict_derm_scores(
+    file: UploadFile = File(...),
+    diameter_mm: float = 6.0,
+    evolution: bool = False,
+) -> dict:
+    """Scores cliniques ABCDE + Breslow + Clark + TNM mélanome."""
+    if not _DERM_OK:
+        from fastapi import HTTPException
+        raise HTTPException(503, "DermAI non disponible")
+    suffix = Path(file.filename or "upload.jpg").suffix or ".jpg"
+    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read()); temp_path = tmp.name
+    result = predict_derm(image_path=temp_path,
+                          params={"diameter_mm": diameter_mm, "evolution": evolution})
+    return {
+        "request_id":      result.get("request_id"),
+        "prediction":      result.get("prediction"),
+        "confidence":      result.get("confidence"),
+        "clinical_scores": result.get("clinical_scores"),
+        "clinical_profile":result.get("clinical_profile"),
+        "severity":        result.get("severity"),
+        "processing_ms":   result.get("processing_ms"),
+        "status":          result.get("status"),
+    }
+
+
+@app.post("/predict/derm/differential", tags=["DermAI"])
+async def predict_derm_differential(file: UploadFile = File(...)) -> dict:
+    """Diagnostic différentiel Top-3 dermatologique avec CIM-10 et catégorie."""
+    if not _DERM_OK:
+        from fastapi import HTTPException
+        raise HTTPException(503, "DermAI non disponible")
+    suffix = Path(file.filename or "upload.jpg").suffix or ".jpg"
+    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read()); temp_path = tmp.name
+    result = predict_derm(image_path=temp_path)
+    return {
+        "request_id":            result.get("request_id"),
+        "prediction":            result.get("prediction"),
+        "confidence":            result.get("confidence"),
+        "differential_diagnosis":result.get("differential_diagnosis"),
+        "probabilities":         result.get("probabilities"),
+        "processing_ms":         result.get("processing_ms"),
+        "status":                result.get("status"),
+    }
+
+
+@app.post("/derm/report", tags=["DermAI"])
+async def generate_derm_report(
+    file: UploadFile = File(...),
+    patient_id: str = "KANEA-AUTO",
+    examiner: str = "KANÉA System",
+    diameter_mm: float = 6.0,
+    evolution: bool = False,
+) -> dict:
+    """Analyse complète DermAI + rapport PDF médical A4 (base64)."""
+    import base64
+    if not _DERM_OK:
+        from fastapi import HTTPException
+        raise HTTPException(503, "DermAI non disponible")
+    suffix = Path(file.filename or "upload.jpg").suffix or ".jpg"
+    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read()); temp_path = tmp.name
+    result = predict_derm(image_path=temp_path,
+                          params={"diameter_mm": diameter_mm, "evolution": evolution})
+    pdf_b64 = None
+    try:
+        pdf_bytes = build_derm_pdf_report(result, patient_id=patient_id, examiner=examiner)
+        if pdf_bytes:
+            pdf_b64 = base64.b64encode(pdf_bytes).decode("ascii")
+    except Exception as exc:
+        log.warning("DermAI PDF failed: %s", exc)
+    return {
+        **{k: v for k, v in result.items() if k not in ("explainability",)},
+        "pdf_report_b64": pdf_b64,
+        "pdf_available":  pdf_b64 is not None,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # MODULE 9 — SEPSISPREDICT AI v2.0
 # ═══════════════════════════════════════════════════════════════════════════════
 
