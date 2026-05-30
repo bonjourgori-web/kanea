@@ -298,7 +298,113 @@ async def generate_bc_report(file: UploadFile = File(...)) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# MODULES 5–17 — SCAFFOLD AI MODULES
+# MODULE 5 — PULMOSCAN AI v2.0 (16 pathologies pulmonaires)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+try:
+    from modules.pulmoscan_ai.predictor import predict_pulmoscan
+    from modules.pulmoscan_ai.report import build_pulmoscan_pdf_report
+    _PULMOSCAN_OK = True
+    log.info("PulmoScan AI v2.0 chargé — 16 pathologies pulmonaires")
+except Exception as _ps_err:
+    _PULMOSCAN_OK = False
+    log.warning("PulmoScan AI indisponible : %s", _ps_err)
+
+
+@app.post("/predict/pulmoscan/upload", tags=["PulmoScan AI"])
+async def predict_pulmoscan_upload(file: UploadFile = File(...)) -> dict:
+    """
+    PulmoScan AI v2.0 — Analyse complète radiographie/TDM thoracique.
+    Détecte 16 pathologies pulmonaires avec scores cliniques et Grad-CAM.
+    """
+    if not _PULMOSCAN_OK:
+        from fastapi import HTTPException
+        raise HTTPException(503, "PulmoScan AI non disponible")
+    suffix = Path(file.filename or "upload.png").suffix or ".png"
+    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        temp_path = tmp.name
+    return predict_pulmoscan(image_path=temp_path)
+
+
+@app.post("/predict/pulmoscan/severity", tags=["PulmoScan AI"])
+async def predict_pulmoscan_severity(file: UploadFile = File(...)) -> dict:
+    """Sévérité + urgence + CURB-65/PSI/COVID CT Severity selon pathologie détectée."""
+    if not _PULMOSCAN_OK:
+        from fastapi import HTTPException
+        raise HTTPException(503, "PulmoScan AI non disponible")
+    suffix = Path(file.filename or "upload.png").suffix or ".png"
+    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        temp_path = tmp.name
+    result = predict_pulmoscan(image_path=temp_path)
+    return {
+        "request_id":      result.get("request_id"),
+        "prediction":      result.get("prediction"),
+        "confidence":      result.get("confidence"),
+        "severity":        result.get("severity"),
+        "clinical_profile": result.get("clinical_profile"),
+        "clinical_scores": result.get("clinical_scores"),
+        "clinical_safety": result.get("clinical_safety"),
+        "processing_ms":   result.get("processing_ms"),
+        "status":          result.get("status"),
+    }
+
+
+@app.post("/predict/pulmoscan/differential", tags=["PulmoScan AI"])
+async def predict_pulmoscan_differential(file: UploadFile = File(...)) -> dict:
+    """Diagnostic différentiel Top-3 avec probabilités et CIM-10."""
+    if not _PULMOSCAN_OK:
+        from fastapi import HTTPException
+        raise HTTPException(503, "PulmoScan AI non disponible")
+    suffix = Path(file.filename or "upload.png").suffix or ".png"
+    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        temp_path = tmp.name
+    result = predict_pulmoscan(image_path=temp_path)
+    return {
+        "request_id":           result.get("request_id"),
+        "prediction":           result.get("prediction"),
+        "confidence":           result.get("confidence"),
+        "differential_diagnosis": result.get("differential_diagnosis"),
+        "probabilities":        result.get("probabilities"),
+        "processing_ms":        result.get("processing_ms"),
+        "status":               result.get("status"),
+    }
+
+
+@app.post("/pulmoscan/report", tags=["PulmoScan AI"])
+async def generate_pulmoscan_report(
+    file: UploadFile = File(...),
+    patient_id: str = "KANEA-AUTO",
+    examiner: str = "KANÉA System",
+) -> dict:
+    """Analyse complète + génération rapport PDF médical A4 (base64)."""
+    import base64
+    if not _PULMOSCAN_OK:
+        from fastapi import HTTPException
+        raise HTTPException(503, "PulmoScan AI non disponible")
+    suffix = Path(file.filename or "upload.png").suffix or ".png"
+    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        temp_path = tmp.name
+    result = predict_pulmoscan(image_path=temp_path)
+    pdf_b64 = None
+    try:
+        pdf_bytes = build_pulmoscan_pdf_report(result, patient_id=patient_id, examiner=examiner)
+        if pdf_bytes:
+            pdf_b64 = base64.b64encode(pdf_bytes).decode("ascii")
+    except Exception as exc:
+        log.warning("PulmoScan PDF generation failed: %s", exc)
+    return {
+        **{k: v for k, v in result.items() if k not in ("explainability",)},
+        "pdf_report_b64": pdf_b64,
+        "pdf_available":  pdf_b64 is not None,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MODULES 6–17 — SCAFFOLD AI MODULES
 # ═══════════════════════════════════════════════════════════════════════════════
 
 from modules.kanea_modules.scaffold import scaffold_predict, MODULES as _SCAFFOLD_MODULES
@@ -306,7 +412,6 @@ from modules.kanea_modules.scaffold import scaffold_predict, MODULES as _SCAFFOL
 def _make_scaffold_routes() -> None:
     """Enregistre dynamiquement les routes pour tous les modules scaffold."""
     _ROUTE_MAP = {
-        "pulmoscan": "/predict/pulmoscan",
         "derm":      "/predict/derm",
         "retina":    "/predict/retina",
         "cardio":    "/predict/cardio",

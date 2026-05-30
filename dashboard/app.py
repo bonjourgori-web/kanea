@@ -3655,9 +3655,365 @@ def _render_ai_module(module_key: str) -> None:
                         )
 
 
+def _render_pulmoscan() -> None:
+    """PulmoScan AI v2.0 — Interface clinique complète (16 pathologies pulmonaires)."""
+    from modules.pulmoscan_ai.predictor import predict_pulmoscan, CLASSES as PS_CLASSES
+    from modules.pulmoscan_ai.report import build_pulmoscan_pdf_report, build_pulmoscan_html_report
+
+    # Session state
+    for _k in ("ps_result", "ps_pdf_bytes", "ps_img_name"):
+        if _k not in st.session_state:
+            st.session_state[_k] = None
+
+    # Header
+    st.markdown(
+        """
+        <div class="page-header" style="background:linear-gradient(135deg,#1A3A5C,#2980B9);">
+            <h1>🫁 PulmoScan AI — Module 5 · v2.0</h1>
+            <p>16 pathologies pulmonaires · DenseNet121 · Grad-CAM · CURB-65 · PSI · Lung-RADS · TNM · GOLD</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    col_info, col_upload = st.columns([1, 1.5], gap="large")
+
+    with col_info:
+        st.markdown(
+            """
+            <div class="section-card">
+                <div class="section-title">🫁 Pathologies détectées (16)</div>
+            """,
+            unsafe_allow_html=True,
+        )
+        _ps_profiles = {
+            "Normal":                 ("Faible",   "#27AE60"),
+            "Pneumonie bactérienne":  ("Élevée",   "#E67E22"),
+            "Pneumonie virale":       ("Modérée",  "#E67E22"),
+            "COVID-19":               ("Élevée",   "#8E44AD"),
+            "Tuberculose pulmonaire": ("Critique", "#C0392B"),
+            "Cancer pulmonaire":      ("Critique", "#922B21"),
+            "Nodule pulmonaire":      ("Modérée",  "#E74C3C"),
+            "Fibrose pulmonaire":     ("Modérée",  "#7F8C8D"),
+            "BPCO / Emphysème":       ("Modérée",  "#F39C12"),
+            "Bronchiectasies":        ("Modérée",  "#16A085"),
+            "Atélectasie":            ("Élevée",   "#2980B9"),
+            "Épanchement pleural":    ("Élevée",   "#2E86DE"),
+            "Pneumothorax":           ("Critique", "#E74C3C"),
+            "Œdème pulmonaire":       ("Critique", "#C0392B"),
+            "Hypertension pulmonaire":("Élevée",   "#8E44AD"),
+            "Maladie interstitielle": ("Modérée",  "#9B59B6"),
+        }
+        for cls in PS_CLASSES:
+            urg, color = _ps_profiles.get(cls, ("Modérée", "#5E7A8A"))
+            st.markdown(
+                f"""<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+                <span style="width:8px;height:8px;border-radius:50%;background:{color};display:inline-block;flex-shrink:0;"></span>
+                <span style="font-size:.8rem;color:#1A2B3C;flex:1;">{cls}</span>
+                <span style="font-size:.67rem;font-weight:700;color:{color};background:{color}18;
+                border-radius:3px;padding:1px 5px;">{urg}</span>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown(
+            """
+            <div class="section-card" style="margin-top:.6rem;">
+                <div class="section-title">📊 Scores cliniques calculés</div>
+                <div style="font-size:.8rem;color:#5E7A8A;line-height:1.9;">
+                🔸 <b>CURB-65</b> — Sévérité pneumonie (BTS)<br>
+                🔸 <b>PSI / Fine Score</b> — Risque mortalité pneumonie<br>
+                🔸 <b>Lung-RADS v2022</b> — Nodules pulmonaires (ACR)<br>
+                🔸 <b>Fleischner 2017</b> — Suivi nodules incidentels<br>
+                🔸 <b>TNM IASLC 9e</b> — Staging cancer pulmonaire<br>
+                🔸 <b>GOLD 2024</b> — Classification BPCO<br>
+                🔸 <b>BODE Index</b> — Pronostic BPCO<br>
+                🔸 <b>COVID CT Severity</b> — Score OMS lobes
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            """
+            <div class="section-card" style="margin-top:.6rem;">
+                <div class="section-title">🤖 Architecture IA</div>
+                <div style="font-size:.8rem;color:#5E7A8A;line-height:1.8;">
+                🏗️ <b>DenseNet121</b> — pré-entraîné ImageNet<br>
+                📚 <b>NIH ChestXray14</b> (112 120 images)<br>
+                📚 <b>CheXpert</b> (224 316 images)<br>
+                📚 <b>COVIDx</b> — COVID-19<br>
+                📚 <b>Montgomery/Shenzhen</b> — Tuberculose<br>
+                ⚡ <b>ONNX Runtime</b> — CPU uniquement<br>
+                🔥 <b>Grad-CAM · Grad-CAM++ · Attention Map</b>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with col_upload:
+        st.markdown("<div class='section-card'><div class='section-title'>📤 Analyser une image</div>", unsafe_allow_html=True)
+
+        uploaded = st.file_uploader(
+            "Importer une radiographie thoracique ou TDM (PNG, JPG, JPEG)",
+            type=["png", "jpg", "jpeg"],
+            key="ps_upload",
+        )
+
+        if uploaded:
+            st.image(uploaded, caption=uploaded.name, use_container_width=True)
+
+        if st.button("🫁 Lancer l'analyse PulmoScan AI", use_container_width=True, key="btn_ps"):
+            if not uploaded:
+                st.warning("⚠️ Veuillez importer une image avant de lancer l'analyse.")
+            else:
+                with st.spinner("🧠 Analyse PulmoScan AI — 16 pathologies…"):
+                    time.sleep(0.4)
+                    suffix = Path(uploaded.name).suffix or ".png"
+                    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                        tmp.write(uploaded.getbuffer())
+                        temp_path = tmp.name
+                    result = predict_pulmoscan(image_path=temp_path)
+                    st.session_state["ps_result"]   = result
+                    st.session_state["ps_img_name"] = uploaded.name
+                    # Génération PDF
+                    try:
+                        pdf = build_pulmoscan_pdf_report(
+                            result,
+                            patient_id=f"KANEA-{result.get('request_id','')[:8]}",
+                            examiner="KANÉA System",
+                        )
+                        st.session_state["ps_pdf_bytes"] = pdf
+                    except Exception:
+                        pass
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # ── RÉSULTATS ────────────────────────────────────────────────────────
+        res = st.session_state.get("ps_result") or {}
+        if res.get("status") == "success":
+            pred    = res.get("prediction", "—")
+            conf    = res.get("confidence", 0)
+            urg     = res.get("clinical_profile", {}).get("urgency", "—")
+            sev     = res.get("severity", "—")
+            action  = res.get("recommended_action", "—")
+            pattern = res.get("clinical_profile", {}).get("pattern", "—")
+            icd10   = res.get("clinical_profile", {}).get("icd10", "—")
+            c_hex   = res.get("clinical_profile", {}).get("color", "#2980B9")
+            safety  = res.get("clinical_safety", {})
+
+            # Résultat principal
+            st.markdown(
+                f"""<div style="background:{c_hex}12;border:1.5px solid {c_hex}55;
+                border-radius:16px;padding:1.1rem 1.3rem;margin-top:.8rem;">
+                <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;">
+                  <div>
+                    <div style="font-size:1.4rem;font-weight:900;color:{c_hex};">🫁 {pred}</div>
+                    <div style="font-size:.82rem;color:#5E7A8A;margin-top:3px;">
+                      CIM-10 : <b>{icd10}</b> &nbsp;·&nbsp; Confiance : <b>{conf:.1%}</b>
+                    </div>
+                  </div>
+                  <div style="text-align:right;">
+                    <span style="background:{c_hex}20;border:1px solid {c_hex}55;border-radius:999px;
+                    padding:.3rem .9rem;font-size:.75rem;font-weight:800;color:{c_hex};">{urg}</span>
+                    <div style="font-size:.72rem;color:#5E7A8A;margin-top:.3rem;">Sévérité : <b>{sev}</b></div>
+                  </div>
+                </div>
+                <div style="margin-top:.7rem;background:rgba(255,255,255,.8);border-radius:10px;
+                padding:.6rem .8rem;border:1px solid #DDE8EE;">
+                  <div style="font-size:.72rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;">Pattern radiologique</div>
+                  <div style="font-size:.85rem;color:#1A2B3C;margin-top:.2rem;">{pattern}</div>
+                </div>
+                <div style="margin-top:.5rem;background:rgba(255,255,255,.8);border-radius:10px;
+                padding:.6rem .8rem;border:1px solid #DDE8EE;">
+                  <div style="font-size:.72rem;font-weight:700;color:#5E7A8A;text-transform:uppercase;">Action recommandée</div>
+                  <div style="font-size:.85rem;color:#1A2B3C;font-weight:600;">💡 {action}</div>
+                </div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+            if safety.get("level") in ("warning", "critical"):
+                lvl = safety.get("level")
+                msg = safety.get("message", "")
+                if lvl == "critical":
+                    st.error(f"🚨 {msg}", icon="🏥")
+                else:
+                    st.warning(f"⚠️ {msg}", icon="⚠️")
+
+            # Jauge confiance + probabilités Plotly
+            probs = res.get("probabilities", {})
+            if probs:
+                g_col, b_col = st.columns([1, 2], gap="medium")
+                with g_col:
+                    _gf = go.Figure(go.Indicator(
+                        mode="gauge+number",
+                        value=round(conf * 100, 1),
+                        number={"suffix": "%", "font": {"size": 24, "color": c_hex}},
+                        gauge={
+                            "axis": {"range": [0, 100]},
+                            "bar": {"color": c_hex, "thickness": 0.28},
+                            "bgcolor": "rgba(0,0,0,0)",
+                            "bordercolor": "rgba(0,0,0,0)",
+                            "steps": [
+                                {"range": [0, 50],  "color": "rgba(231,76,60,0.08)"},
+                                {"range": [50, 75], "color": "rgba(243,156,18,0.08)"},
+                                {"range": [75,100], "color": "rgba(39,174,96,0.08)"},
+                            ],
+                            "threshold": {"line": {"color": "#1A2B3C","width": 2}, "thickness": 0.75, "value": round(conf*100,1)},
+                        },
+                        title={"text": "Confiance IA", "font": {"size": 12, "color": "#5E7A8A"}},
+                    ))
+                    _gf.update_layout(height=190, margin=dict(l=8,r=8,t=28,b=8),
+                                      paper_bgcolor="rgba(0,0,0,0)", font_family="Inter")
+                    st.plotly_chart(_gf, use_container_width=True)
+
+                with b_col:
+                    top8 = sorted(probs.items(), key=lambda x: x[1])[-8:]
+                    _bf = go.Figure(go.Bar(
+                        x=[round(p*100,1) for _,p in top8],
+                        y=[c for c,_ in top8],
+                        orientation="h",
+                        marker_color=[_ps_profiles.get(c, ("","#5E7A8A"))[1] for c,_ in top8],
+                        text=[f"{p*100:.1f}%" for _,p in top8],
+                        textposition="outside",
+                        textfont=dict(size=10, color="#1A2B3C"),
+                    ))
+                    _bf.update_layout(
+                        height=200,
+                        xaxis=dict(range=[0, 100], showgrid=False, visible=False),
+                        yaxis=dict(tickfont=dict(size=10, color="#1A2B3C")),
+                        margin=dict(l=5, r=45, t=5, b=5),
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        showlegend=False, font_family="Inter",
+                        title=dict(text="Top 8 probabilités", font=dict(size=11, color="#5E7A8A")),
+                    )
+                    st.plotly_chart(_bf, use_container_width=True)
+
+            # Grad-CAM
+            hm = (res.get("explainability") or {}).get("heatmap_b64")
+            if hm:
+                st.markdown("**🔥 Grad-CAM — Localisation des anomalies pulmonaires**")
+                st.markdown(
+                    f'<img src="data:image/png;base64,{hm}" '
+                    'style="width:100%;border-radius:12px;border:1px solid #DDE8EE;" alt="Grad-CAM"/>',
+                    unsafe_allow_html=True,
+                )
+
+            # Scores cliniques
+            scores = res.get("clinical_scores", {})
+            _score_keys = [k for k in scores if k not in ("prediction","confidence")]
+            if _score_keys:
+                with st.expander("📊 Scores cliniques détaillés"):
+                    if "curb65" in scores:
+                        c65 = scores["curb65"]
+                        st.markdown(f"**CURB-65 :** Score {c65.get('score','—')} — {c65.get('severity','—')} — Mortalité 30j : {c65.get('mortality','—')}")
+                        st.markdown(f"→ {c65.get('recommendation','—')}")
+                    if "psi" in scores:
+                        psi = scores["psi"]
+                        st.markdown(f"**PSI (Fine) :** Classe {psi.get('class','—')} (score {psi.get('score','—')}) — Mortalité : {psi.get('mortality','—')}")
+                    if "covid_ct_severity" in scores:
+                        cv = scores["covid_ct_severity"]
+                        st.markdown(f"**COVID CT Severity :** {cv.get('total_score','—')}/25 — Atteinte {cv.get('involvement','—')} — {cv.get('severity','—')}")
+                    if "lung_rads" in scores:
+                        lr = scores["lung_rads"]
+                        st.markdown(f"**Lung-RADS :** Catégorie {lr.get('category','—')} — Malignité {lr.get('probability','—')} — {lr.get('management','—')}")
+                    if "tnm" in scores:
+                        tnm = scores["tnm"]
+                        st.markdown(f"**TNM :** T{tnm.get('T','?')} N{tnm.get('N','?')} M{tnm.get('M','?')} → Stade **{tnm.get('stage','—')}** — {tnm.get('survival','—')}")
+                    if "gold" in scores:
+                        g = scores["gold"]
+                        st.markdown(f"**GOLD BPCO :** {g.get('grade','—')} — Groupe {g.get('group','—')} — {g.get('treatment','—')}")
+                    if "tuberculosis" in scores:
+                        tb = scores["tuberculosis"]
+                        st.markdown(f"**TB OMS :** {tb.get('form','—')} — {tb.get('severity','—')} — Traitement : {tb.get('treatment','—')} ({tb.get('duration_months','—')} mois)")
+
+            # Différentiel
+            diff = res.get("differential_diagnosis", [])
+            if len(diff) > 1:
+                with st.expander("🔍 Diagnostic différentiel"):
+                    for d in diff:
+                        dc = _ps_profiles.get(d["class"], ("","#5E7A8A"))[1]
+                        st.markdown(
+                            f"""<div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;">
+                            <span style="width:10px;height:10px;border-radius:50%;background:{dc};display:inline-block;"></span>
+                            <span style="flex:1;font-size:.85rem;">{d['class']}</span>
+                            <b style="color:{dc}">{d['probability']:.1%}</b>
+                            <span style="font-size:.75rem;color:#8AABB8;">{d.get('icd10','—')}</span>
+                            </div>""",
+                            unsafe_allow_html=True,
+                        )
+
+            # Quantification
+            quant = res.get("quantification", {})
+            if quant.get("lesion_coverage_pct", 0) > 0:
+                coverage = quant["lesion_coverage_pct"]
+                cov_color = "#C0392B" if coverage > 50 else ("#E67E22" if coverage > 25 else "#27AE60")
+                st.markdown(
+                    f"""<div style="background:#F7F9FC;border-radius:10px;padding:10px 14px;
+                    border-left:4px solid {cov_color};margin-top:.5rem;">
+                    <div style="font-size:.72rem;color:#5E7A8A;font-weight:600;text-transform:uppercase;">Surface estimée atteinte</div>
+                    <div style="font-size:1.3rem;font-weight:800;color:{cov_color};">{coverage:.1f}%</div>
+                    <div style="font-size:.72rem;color:#8AABB8;">{'Sévère > 50%' if coverage > 50 else 'Modérée 25-50%' if coverage > 25 else 'Légère < 25%'}</div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+            # Boutons PDF / JSON
+            st.markdown("<div style='height:.5rem'></div>", unsafe_allow_html=True)
+            pdf_bytes = st.session_state.get("ps_pdf_bytes")
+            if pdf_bytes:
+                st.download_button(
+                    "📥 Télécharger le rapport PDF médical",
+                    data=pdf_bytes,
+                    file_name=f"PulmoScan_{st.session_state.get('ps_img_name','rapport')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="dl_ps_pdf",
+                )
+            else:
+                html_report = build_pulmoscan_html_report(res)
+                st.download_button(
+                    "📥 Télécharger le rapport HTML",
+                    data=html_report.encode("utf-8"),
+                    file_name=f"PulmoScan_{st.session_state.get('ps_img_name','rapport')}.html",
+                    mime="text/html",
+                    use_container_width=True,
+                    key="dl_ps_html",
+                )
+
+            with st.expander("🔍 Réponse JSON complète"):
+                st.json({k: v for k, v in res.items() if k != "explainability"})
+
+        elif res.get("status") == "no_image":
+            pass
+        elif res:
+            st.error(f"Erreur : {res.get('error', 'Inconnue')}")
+        else:
+            st.markdown(
+                """
+                <div style="border:2px dashed #DDE8EE;border-radius:14px;padding:2.5rem;
+                text-align:center;color:#8AABB8;margin-top:.5rem;">
+                    <div style="font-size:2.5rem;margin-bottom:.5rem;">🫁</div>
+                    <div style="font-size:.92rem;">Importer une radiographie ou TDM thoracique</div>
+                    <div style="font-size:.78rem;margin-top:.3rem;opacity:.7;">PNG · JPG · JPEG</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        st.markdown(
+            "<div class='disclaimer' style='margin-top:.8rem;'>⚠️ PulmoScan AI — Outil d'aide à la décision. "
+            "Interpréter sous supervision d'un médecin ou radiologue qualifié.</div>",
+            unsafe_allow_html=True,
+        )
+
+
 def page_maladies(sous_page: str) -> None:
     _MODULE_MAP = {
-        "PulmoScan AI":      "pulmoscan",
         "DermAI":            "derm",
         "RetinaVision AI":   "retina",
         "CardioSense AI":    "cardio",
@@ -3676,6 +4032,7 @@ def page_maladies(sous_page: str) -> None:
         "Nutrition":    _render_nutrition,
         "Médico-légal": _render_medicolegal,
         "Cancer sein":  _render_breast_cancer,
+        "PulmoScan AI": _render_pulmoscan,
     }
     if sous_page in dispatch:
         dispatch[sous_page]()
