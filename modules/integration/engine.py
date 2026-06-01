@@ -6,6 +6,7 @@ from modules.bioid_ml.predictor import predict_bioid
 from modules.breast_cancer_dl.predictor import predict_breast_cancer
 from modules.malaria_dl.predictor import predict_malaria
 from modules.nutrition_ml.predictor import predict_nutrition
+from modules.hemato_ai.predictor import predict_hemato
 
 
 def multibio_predict(
@@ -13,6 +14,7 @@ def multibio_predict(
     breast_cancer_image_path: str | None = None,
     nutrition_data: dict[str, Any] | None = None,
     bioid_data: dict[str, Any] | None = None,
+    hemato_data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Fonction centrale d'orchestration conforme au Module 4."""
 
@@ -37,6 +39,9 @@ def multibio_predict(
         results["results"]["module_4_breast_cancer"] = predict_breast_cancer(
             image_path=breast_cancer_image_path
         )
+
+    if hemato_data:
+        results["results"]["module_5_hemato"] = predict_hemato(params=hemato_data)
 
     results["available_modules"] = list(results["results"].keys())
     results["status"] = "ok" if results["results"] else "no_input_provided"

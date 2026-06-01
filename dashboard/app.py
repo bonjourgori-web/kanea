@@ -4634,19 +4634,1201 @@ def _render_derm() -> None:
         )
 
 
+def _render_retina() -> None:
+    """RetinaVision AI v1.0 — Interface clinique ophtalmologie (20 pathologies rétiniennes)."""
+    from modules.retina_ai.predictor import predict_retina, CLASSES as RETINA_CLASSES
+    from modules.retina_ai.report import generate_retina_report
+
+    for _k in ("retina_result", "retina_pdf", "retina_img_name"):
+        if _k not in st.session_state:
+            st.session_state[_k] = None
+
+    st.markdown(
+        """<div class="page-header" style="background:linear-gradient(135deg,#0D3B6E,#0D9ED9);">
+            <h1>👁️ RetinaVision AI — Module 9 · v1.0</h1>
+            <p>20 pathologies rétiniennes · EfficientNet-B3 · Grad-CAM anatomique · ETDRS · AREDS2 · CDR · CRT · VFI</p>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    col_info, col_upload = st.columns([1, 1.5], gap="large")
+
+    with col_info:
+        _retina_cats = {
+            "🔴 Rétinopathie diabétique": ["Légère", "Modérée", "Sévère", "Proliférante"],
+            "🟣 DMLA": ["DMLA sèche précoce", "Atrophie géographique", "DMLA humide (NVC)"],
+            "🔵 Glaucome": ["Angle ouvert", "Angle fermé", "Neuropathie optique"],
+            "🟠 Œdème maculaire": ["Œdème maculaire diabétique", "Trou maculaire"],
+            "🔴 Vasculaire": ["Occlusion veineuse", "Occlusion artérielle", "Rétinopathie HTA"],
+            "🟤 Autres": ["Décollement rétine", "Membrane épirétinienne", "Rétinite pigmentaire", "Myopie patho."],
+        }
+        _retina_colors = {
+            "🔴 Rétinopathie diabétique": "#E74C3C",
+            "🟣 DMLA": "#7C3AED",
+            "🔵 Glaucome": "#1A5276",
+            "🟠 Œdème maculaire": "#D35400",
+            "🔴 Vasculaire": "#922B21",
+            "🟤 Autres": "#6D4C41",
+        }
+        for cat, diseases in _retina_cats.items():
+            c = _retina_colors.get(cat, "#5E7A8A")
+            st.markdown(
+                f"""<div style="margin-bottom:.5rem;padding:.5rem .8rem;background:#FFF;
+                border-radius:10px;border-left:4px solid {c};border:1px solid #EEF2F6;
+                box-shadow:0 1px 6px rgba(0,0,0,.05);">
+                <div style="font-size:.72rem;font-weight:700;color:{c};margin-bottom:.2rem;">{cat}</div>
+                <div style="font-size:.74rem;color:#5E7A8A;line-height:1.6;">{" · ".join(diseases)}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+        st.markdown(
+            """<div class="section-card" style="margin-top:.6rem;">
+                <div class="section-title">📊 Scores calculés</div>
+                <div style="font-size:.8rem;color:#5E7A8A;line-height:1.9;">
+                👁️ <b>ETDRS</b> — Severity Scale rétinopathie diabétique<br>
+                👁️ <b>ICDR</b> — International Clinical DR Scale (5 niveaux)<br>
+                👁️ <b>AREDS2</b> — Classification DMLA (catégories 0–4)<br>
+                👁️ <b>CDR</b> — Cup-to-Disc Ratio + RNFL (glaucome)<br>
+                👁️ <b>CRT</b> — Central Retinal Thickness OCT (µm)<br>
+                👁️ <b>VFI / MD / PSD</b> — Champ visuel Humphrey HFA<br>
+                👁️ <b>Score vasculaire</b> — KWB + risque AVC
+                </div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+
+    with col_upload:
+        st.markdown("<div class='section-card'><div class='section-title'>📤 Analyser une image rétinienne</div>", unsafe_allow_html=True)
+
+        uploaded = st.file_uploader(
+            "Importer un fond d'œil, OCT ou angiographie (PNG, JPG)",
+            type=["png", "jpg", "jpeg"], key="retina_upload",
+        )
+
+        c_params = st.columns(2)
+        iop_mmhg   = c_params[0].number_input("IOP (mmHg)", 6.0, 50.0, 15.0, 0.5, key="retina_iop")
+        eye_choice = c_params[1].selectbox("Œil analysé", ["Droit (OD)", "Gauche (OG)"], key="retina_eye")
+
+        c2 = st.columns(2)
+        has_diabetes = c2[0].checkbox("Diabète connu", key="retina_diab")
+        has_hta      = c2[1].checkbox("Hypertension artérielle", key="retina_hta")
+
+        if uploaded:
+            st.image(uploaded, caption=uploaded.name, use_container_width=True)
+
+        if st.button("👁️ Lancer l'analyse RetinaVision AI", use_container_width=True, key="btn_retina"):
+            if not uploaded:
+                st.warning("⚠️ Veuillez importer une image rétinienne.")
+            else:
+                with st.spinner("🧠 RetinaVision AI — EfficientNet-B3 · Grad-CAM · ETDRS · AREDS2…"):
+                    time.sleep(0.4)
+                    suffix = Path(uploaded.name).suffix or ".jpg"
+                    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                        tmp.write(uploaded.getbuffer()); temp_path = tmp.name
+                    result = predict_retina(
+                        image_path=temp_path,
+                        params={
+                            "iop_mmhg": iop_mmhg,
+                            "diabetic_context": has_diabetes,
+                            "hypertensive_context": has_hta,
+                        }
+                    )
+                    st.session_state["retina_result"]   = result
+                    st.session_state["retina_img_name"] = uploaded.name
+                    try:
+                        pdf = generate_retina_report(
+                            result,
+                            patient_info={
+                                "eye": eye_choice,
+                                "diabete": "Oui" if has_diabetes else "Non",
+                                "hypertension": "Oui" if has_hta else "Non",
+                            }
+                        )
+                        st.session_state["retina_pdf"] = pdf
+                    except Exception:
+                        pass
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # ── RÉSULTATS ────────────────────────────────────────────────────────────
+        res = st.session_state.get("retina_result") or {}
+        if res.get("status") == "success":
+            pred    = res["prediction"]
+            conf    = res["confidence"]
+            urgency = res.get("overall_urgency", "—")
+            color   = res["clinical_profile"]["color"]
+            action  = res["recommended_action"]
+            safety  = res["clinical_safety"]
+
+            # Alerte urgence
+            if safety.get("level") in ("critical", "emergency"):
+                st.error(f"🚨 {safety['message']}")
+            elif safety.get("level") == "warning":
+                st.warning(f"⚠️ {safety['message']}")
+
+            # Résultat principal
+            st.markdown(
+                f"""<div style="background:{color}12;border:1.5px solid {color}55;
+                border-radius:14px;padding:1rem 1.2rem;margin-bottom:.8rem;">
+                <div style="font-size:.72rem;font-weight:700;color:{color};text-transform:uppercase;margin-bottom:.3rem;">
+                👁️ DIAGNOSTIC RETINAVISION AI — Confiance : {conf:.1%}</div>
+                <div style="font-size:1.15rem;font-weight:800;color:{color};margin-bottom:.4rem;">{pred}</div>
+                <div style="font-size:.82rem;color:#5E7A8A;">{res['clinical_profile'].get('pattern','—')}</div>
+                <div style="font-size:.78rem;color:{color};font-weight:600;margin-top:.4rem;">
+                ⚡ Urgence : {urgency} &nbsp;|&nbsp; ICD-10 : {res['clinical_profile'].get('icd10','—')} &nbsp;|&nbsp;
+                Catégorie : {res['clinical_profile'].get('category','—')}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+            # Conduite à tenir
+            st.info(f"**Conduite IA :** {action}")
+
+            # Anti-VEGF / Laser
+            col_flags = st.columns(3)
+            col_flags[0].metric("Anti-VEGF", "✅ Indiqué" if res["clinical_profile"].get("anti_vegf_indication") else "❌ Non indiqué")
+            col_flags[1].metric("Laser rétinien", "✅ Indiqué" if res["clinical_profile"].get("laser_indication") else "❌ Non indiqué")
+            col_flags[2].metric("Sévérité", res.get("severity", "—"))
+
+            # Grad-CAM
+            heatmap = res.get("explainability", {}).get("heatmap_b64")
+            if heatmap:
+                import base64 as _b64
+                st.markdown(
+                    f"""<div style="text-align:center;margin:.8rem 0;">
+                    <img src="data:image/png;base64,{heatmap}"
+                         style="border-radius:12px;max-width:100%;border:1.5px solid {color}55;"/>
+                    <div style="font-size:.75rem;color:#8AABB8;margin-top:.3rem;">
+                    Grad-CAM — Zone : {res['explainability'].get('anatomic_zone','—')}</div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+            # Scores ETDRS + AREDS2
+            scores = res.get("clinical_scores", {})
+            with st.expander("📊 Scores cliniques — ETDRS · AREDS2 · CDR · CRT · VFI"):
+                s_col1, s_col2 = st.columns(2)
+                etdrs = scores.get("etdrs", {})
+                areds = scores.get("areds2", {})
+                cdr   = scores.get("cup_to_disc", {})
+                crt   = scores.get("crt", {})
+                vf    = scores.get("visual_field", {})
+
+                with s_col1:
+                    st.markdown(f"**ETDRS Level :** `{etdrs.get('level','—')}` — **{etdrs.get('stage','—')}**")
+                    st.markdown(f"→ Urgence : {etdrs.get('urgency','—')}")
+                    st.markdown(f"→ {etdrs.get('recommendation','—')}")
+                    st.divider()
+                    st.markdown(f"**AREDS2 :** Catégorie `{areds.get('category','—')}` — {areds.get('stage','—')}")
+                    st.markdown(f"→ Risque 5 ans : **{areds.get('five_year_risk','—')}**")
+                    st.markdown(f"→ {areds.get('supplement','—')}")
+
+                with s_col2:
+                    st.markdown(f"**CDR (Cup-to-Disc) :** `{cdr.get('cdr','—')}` — {cdr.get('stage','—')}")
+                    st.markdown(f"→ RNFL : {cdr.get('rnfl','—')}")
+                    st.divider()
+                    st.markdown(f"**CRT :** `{crt.get('crt_um','—')} µm` — {crt.get('stage','—')}")
+                    st.markdown(f"→ Anti-VEGF : {'✅' if crt.get('anti_vegf') else '❌'}")
+                    st.divider()
+                    st.markdown(f"**VFI :** `{vf.get('vfi_percent','—')}%` | MD : `{vf.get('md_db','—')} dB`")
+                    st.markdown(f"→ {vf.get('stage','—')}")
+
+            # Diagnostic différentiel
+            diff = res.get("differential_diagnosis", [])
+            if diff:
+                df_diff = st.columns(len(diff))
+                for i, (col_d, d) in enumerate(zip(df_diff, diff)):
+                    col_d.metric(
+                        d["class"][:22] + "…" if len(d["class"]) > 24 else d["class"],
+                        f"{d['probability']:.1%}",
+                        delta=d.get("urgency", "—"),
+                    )
+
+            # Quantification
+            quant = res.get("quantification", {})
+            with st.expander("🔬 Quantification lésionnelle"):
+                q1, q2, q3, q4 = st.columns(4)
+                q1.metric("Surface lésions", f"{quant.get('lesion_coverage_pct',0):.1f}%")
+                q2.metric("Ratio hémorragies", f"{quant.get('hemorrhage_ratio',0):.4f}")
+                q3.metric("Ratio drusen", f"{quant.get('drusen_ratio',0):.4f}")
+                q4.metric("Exsudats", f"{quant.get('exudate_ratio',0):.4f}")
+
+            # PDF
+            pdf = st.session_state.get("retina_pdf")
+            if pdf:
+                st.download_button(
+                    "📥 Télécharger le rapport PDF médical",
+                    data=pdf,
+                    file_name=f"RetinaVision_{st.session_state.get('retina_img_name','rapport')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="dl_retina_pdf",
+                )
+
+            with st.expander("🔍 JSON complet"):
+                st.json({k: v for k, v in res.items() if k not in ("explainability", "probabilities")})
+
+        else:
+            st.markdown(
+                """<div style="border:2px dashed #DDE8EE;border-radius:14px;padding:2.5rem;
+                text-align:center;color:#8AABB8;">
+                <div style="font-size:2.5rem;margin-bottom:.5rem;">👁️</div>
+                <div style="font-size:.92rem;">Importer un fond d'œil, une image OCT ou une angiographie</div>
+                <div style="font-size:.78rem;margin-top:.3rem;opacity:.7;">
+                EyePACS · APTOS · MESSIDOR · Rétinoscope numérique · OCT Cirrus / Spectralis</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+        st.markdown(
+            "<div class='disclaimer' style='margin-top:.8rem;'>⚠️ RetinaVision AI — Outil d'aide au diagnostic ophtalmologique. "
+            "Toute pathologie rétinienne doit être confirmée par un ophtalmologue ou rétinologue qualifié.</div>",
+            unsafe_allow_html=True,
+        )
+
+
+def _render_neuro() -> None:
+    """NeuroVision AI v1.0 — Interface clinique neurologie (25 pathologies)."""
+    from modules.neuro_ai.predictor import predict_neuro, CLASSES as NEURO_CLASSES
+    from modules.neuro_ai.report import generate_neuro_report
+
+    for _k in ("neuro_result", "neuro_pdf", "neuro_img_name"):
+        if _k not in st.session_state:
+            st.session_state[_k] = None
+
+    st.markdown(
+        """<div class="page-header" style="background:linear-gradient(135deg,#0F1B2D,#1D4ED8);">
+            <h1>🧠 NeuroVision AI — Module 11 · v1.0</h1>
+            <p>25 pathologies neurologiques · EfficientNet-B4 · Grad-CAM cérébral · NIHSS · GCS · MMSE · EDSS · Marshall</p>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    col_info, col_upload = st.columns([1, 1.5], gap="large")
+
+    with col_info:
+        _neuro_cats = {
+            "🔴 AVC & Vasculaire": ["AVC ischémique","AVC hémorragique","Hémorragie intracérébrale","HSA","Hématome épidural","Hématome sous-dural"],
+            "🟣 Tumeurs cérébrales": ["Glioblastome IV","Astrocytome II-III","Méningiome","Métastases","Lymphome PCNSL"],
+            "🔵 Neurodégénératives": ["Alzheimer","Parkinson","Corps de Lewy","SLA"],
+            "🟢 Inflammatoires": ["Sclérose en plaques","Encéphalite auto-immune","NMOSD"],
+            "🟠 Traumatismes": ["Traumatisme crânien sévère","Contusions cérébrales"],
+            "⚪ Autres": ["Hydrocéphalie","Épilepsie focale","Anévrisme","Atrophie diffuse"],
+        }
+        _neuro_colors = {
+            "🔴 AVC & Vasculaire":"#E74C3C","🟣 Tumeurs cérébrales":"#7C3AED",
+            "🔵 Neurodégénératives":"#1D4ED8","🟢 Inflammatoires":"#059669",
+            "🟠 Traumatismes":"#EA580C","⚪ Autres":"#64748B",
+        }
+        for cat, diseases in _neuro_cats.items():
+            c = _neuro_colors.get(cat,"#5E7A8A")
+            st.markdown(
+                f"""<div style="margin-bottom:.5rem;padding:.5rem .8rem;background:#FFF;
+                border-radius:10px;border-left:4px solid {c};border:1px solid #EEF2F6;
+                box-shadow:0 1px 6px rgba(0,0,0,.05);">
+                <div style="font-size:.72rem;font-weight:700;color:{c};margin-bottom:.2rem;">{cat}</div>
+                <div style="font-size:.74rem;color:#5E7A8A;line-height:1.6;">{" · ".join(diseases)}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+        st.markdown(
+            """<div class="section-card" style="margin-top:.6rem;">
+                <div class="section-title">📊 Scores calculés</div>
+                <div style="font-size:.8rem;color:#5E7A8A;line-height:1.9;">
+                🧠 <b>NIHSS</b> — NIH Stroke Scale (0–42)<br>
+                🧠 <b>mRS</b> — Modified Rankin Scale (0–6)<br>
+                🧠 <b>ASPECTS</b> — Alberta Stroke Score (0–10)<br>
+                🧠 <b>GCS</b> — Glasgow Coma Scale (3–15)<br>
+                🧠 <b>Marshall</b> — Classification TBI CT (I–VI)<br>
+                🧠 <b>MMSE · MoCA · CDR</b> — Alzheimer/Démence<br>
+                🧠 <b>Hoehn-Yahr · UPDRS III</b> — Parkinson<br>
+                🧠 <b>EDSS</b> — Sclérose en plaques (0–10)<br>
+                🧠 <b>ICH Score</b> — Hémorragie intracérébrale
+                </div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+
+    with col_upload:
+        st.markdown("<div class='section-card'><div class='section-title'>📤 Analyser une image cérébrale</div>", unsafe_allow_html=True)
+
+        uploaded = st.file_uploader(
+            "Importer une IRM, un scanner CT ou une angiographie cérébrale (PNG, JPG)",
+            type=["png","jpg","jpeg"], key="neuro_upload",
+        )
+        c_params = st.columns(2)
+        age_val    = c_params[0].number_input("Âge patient (ans)", 1, 120, 55, 1, key="neuro_age")
+        age_over80 = age_val >= 80
+        modality   = c_params[1].selectbox("Modalité", ["IRM","CT Scanner","Angiographie","EEG"], key="neuro_mod")
+
+        if uploaded:
+            st.image(uploaded, caption=uploaded.name, use_container_width=True)
+
+        if st.button("🧠 Lancer l'analyse NeuroVision AI", use_container_width=True, key="btn_neuro"):
+            if not uploaded:
+                st.warning("⚠️ Veuillez importer une image cérébrale.")
+            else:
+                with st.spinner("🧠 NeuroVision AI — EfficientNet-B4 · NIHSS · GCS · MMSE · Grad-CAM…"):
+                    time.sleep(0.4)
+                    suffix = Path(uploaded.name).suffix or ".jpg"
+                    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                        tmp.write(uploaded.getbuffer()); temp_path = tmp.name
+                    result = predict_neuro(
+                        image_path=temp_path,
+                        params={"age_over_80": age_over80, "modality": modality}
+                    )
+                    st.session_state["neuro_result"]   = result
+                    st.session_state["neuro_img_name"] = uploaded.name
+                    try:
+                        pdf = generate_neuro_report(result, patient_info={
+                            "age": age_val, "modality": modality,
+                        })
+                        st.session_state["neuro_pdf"] = pdf
+                    except Exception:
+                        pass
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        res = st.session_state.get("neuro_result") or {}
+        if res.get("status") == "success":
+            pred    = res["prediction"]
+            conf    = res["confidence"]
+            urgency = res.get("overall_urgency","—")
+            color   = res["clinical_profile"]["color"]
+            action  = res["recommended_action"]
+            safety  = res["clinical_safety"]
+            window  = res.get("therapeutic_window","—")
+
+            if safety.get("level") in ("critical","emergency"):
+                st.error(f"🚨 {safety['message']}")
+            elif safety.get("level") == "warning":
+                st.warning(f"⚠️ {safety['message']}")
+
+            if window and window != "—":
+                st.error(f"⏱ **FENÊTRE THÉRAPEUTIQUE :** {window}")
+
+            st.markdown(
+                f"""<div style="background:{color}12;border:1.5px solid {color}55;
+                border-radius:14px;padding:1rem 1.2rem;margin-bottom:.8rem;">
+                <div style="font-size:.72rem;font-weight:700;color:{color};text-transform:uppercase;margin-bottom:.3rem;">
+                🧠 DIAGNOSTIC NEUROVISION AI — Confiance : {conf:.1%}</div>
+                <div style="font-size:1.10rem;font-weight:800;color:{color};margin-bottom:.4rem;">{pred}</div>
+                <div style="font-size:.82rem;color:#5E7A8A;">{res['clinical_profile'].get('pattern','—')}</div>
+                <div style="font-size:.78rem;color:{color};font-weight:600;margin-top:.4rem;">
+                ⚡ Urgence : {urgency} &nbsp;|&nbsp; ICD-10 : {res['clinical_profile'].get('icd10','—')} &nbsp;|&nbsp;
+                Modalité : {res['clinical_profile'].get('modality','—')}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+            st.info(f"**Conduite IA :** {action}")
+
+            col_f = st.columns(3)
+            col_f[0].metric("Sévérité", res.get("severity","—"))
+            col_f[1].metric("Volume lésion", f"{res.get('quantification',{}).get('lesion_volume_ml',0):.1f} mL")
+            col_f[2].metric("Shift médian", f"{res.get('quantification',{}).get('midline_shift_mm',0):.1f} mm")
+
+            heatmap = res.get("explainability",{}).get("heatmap_b64")
+            if heatmap:
+                st.markdown(
+                    f"""<div style="text-align:center;margin:.8rem 0;">
+                    <img src="data:image/png;base64,{heatmap}"
+                         style="border-radius:12px;max-width:100%;border:1.5px solid {color}55;"/>
+                    <div style="font-size:.75rem;color:#8AABB8;margin-top:.3rem;">
+                    Grad-CAM — Zone : {res['explainability'].get('anatomic_zone','—')}</div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+            scores = res.get("clinical_scores",{})
+            with st.expander("📊 Scores cliniques — NIHSS · GCS · MMSE · CDR · EDSS"):
+                s1, s2 = st.columns(2)
+                nihss = scores.get("nihss",{}); gcs = scores.get("gcs",{})
+                mmse  = scores.get("mmse",{});  edss = scores.get("edss",{})
+                asp   = scores.get("aspects",{}); ich = scores.get("ich_score",{})
+                with s1:
+                    st.markdown(f"**NIHSS :** `{nihss.get('total','—')}/42` — **{nihss.get('stage','—')}**")
+                    st.markdown(f"→ Thrombolyse : {'✅' if nihss.get('thrombolysis') else '❌'}")
+                    st.markdown(f"**ASPECTS :** `{asp.get('score','—')}/10` — {asp.get('outcome','—')}")
+                    st.markdown(f"**GCS :** `{gcs.get('total','—')}/15` — {gcs.get('severity','—')}")
+                    st.markdown(f"→ Intubation : {'✅' if gcs.get('intubation') else '❌'}")
+                with s2:
+                    st.markdown(f"**MMSE :** `{mmse.get('score','—')}/30` — {mmse.get('severity','—')}")
+                    st.markdown(f"→ {mmse.get('stage','—')}")
+                    st.markdown(f"**EDSS :** `{edss.get('score','—')}/10` — {edss.get('stage','—')}")
+                    st.markdown(f"**ICH Score :** `{ich.get('total','—')}/6` — Mortalité J30 : **{ich.get('mortality_30d','—')}**")
+
+            diff = res.get("differential_diagnosis",[])
+            if diff:
+                st.markdown("**Diagnostic différentiel (Top 4) :**")
+                d_cols = st.columns(len(diff))
+                for col_d, d in zip(d_cols, diff):
+                    col_d.metric(
+                        d["class"][:20]+"…" if len(d["class"])>22 else d["class"],
+                        f"{d['probability']:.1%}", delta=d.get("urgency","—"),
+                    )
+
+            quant = res.get("quantification",{})
+            with st.expander("🔬 Quantification lésionnelle"):
+                q1,q2,q3,q4 = st.columns(4)
+                q1.metric("Surface lésions", f"{quant.get('lesion_coverage_pct',0):.1f}%")
+                q2.metric("Hyperdensité CT", f"{quant.get('hyperdense_ratio',0):.4f}")
+                q3.metric("Atrophie", f"{quant.get('atrophy_ratio',0):.4f}")
+                q4.metric("Lésions SB", f"{quant.get('wm_lesion_ratio',0):.4f}")
+
+            pdf = st.session_state.get("neuro_pdf")
+            if pdf:
+                st.download_button(
+                    "📥 Télécharger le rapport PDF médical",
+                    data=pdf,
+                    file_name=f"NeuroVision_{st.session_state.get('neuro_img_name','rapport')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="dl_neuro_pdf",
+                )
+
+            with st.expander("🔍 JSON complet"):
+                st.json({k:v for k,v in res.items() if k not in ("explainability","probabilities")})
+
+        else:
+            st.markdown(
+                """<div style="border:2px dashed #DDE8EE;border-radius:14px;padding:2.5rem;
+                text-align:center;color:#8AABB8;">
+                <div style="font-size:2.5rem;margin-bottom:.5rem;">🧠</div>
+                <div style="font-size:.92rem;">Importer une IRM cérébrale, un scanner CT ou une angiographie</div>
+                <div style="font-size:.78rem;margin-top:.3rem;opacity:.7;">
+                DICOM · NIfTI converti en PNG · IRM T1/T2/FLAIR/DWI · CT sans injection</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+        st.markdown(
+            "<div class='disclaimer' style='margin-top:.8rem;'>⚠️ NeuroVision AI — Outil d'aide au diagnostic neurologique. "
+            "Toute lésion cérébrale doit être confirmée par un neurologue ou neuroradiologue qualifié.</div>",
+            unsafe_allow_html=True,
+        )
+
+
+def _render_gastro() -> None:
+    """GastroAI v1.0 — Interface clinique gastroentérologie (25 pathologies digestives)."""
+    from modules.gastro_ai.predictor import predict_gastro, CLASSES as GASTRO_CLASSES
+    from modules.gastro_ai.report import generate_gastro_report
+
+    for _k in ("gastro_result", "gastro_pdf", "gastro_img_name"):
+        if _k not in st.session_state:
+            st.session_state[_k] = None
+
+    st.markdown(
+        """<div class="page-header" style="background:linear-gradient(135deg,#0D2137,#059669);">
+            <h1>🩺 GastroAI — Module 13 · v1.0</h1>
+            <p>25 pathologies digestives · EfficientNet-B5 · Grad-CAM endoscopique · Child-Pugh · MELD · CDAI · Blatchford · TNM</p>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    col_info, col_upload = st.columns([1, 1.5], gap="large")
+
+    with col_info:
+        _gastro_cats = {
+            "🔴 Œsophage": ["Œsophagite érosive","Barrett","Cancer œsophage","Varices"],
+            "🟠 Estomac": ["Gastrite","Ulcère gastrique","Ulcère duodénal","Cancer gastrique","H. pylori"],
+            "🟡 Côlon / Rectum": ["Polype bénin","Adénome avancé","Cancer colorectal","Crohn","RCH","Diverticulose"],
+            "🟣 Foie": ["Stéatose","NASH/MAFLD","Hépatite chronique","Cirrhose","CHC"],
+            "🔵 Pancréas / Biliaire": ["Pancréatite aiguë","Cancer pancréas","Cholécystite/Lithiase"],
+        }
+        _gastro_colors = {
+            "🔴 Œsophage":"#E74C3C","🟠 Estomac":"#E67E22","🟡 Côlon / Rectum":"#CA8B00",
+            "🟣 Foie":"#7C3AED","🔵 Pancréas / Biliaire":"#1D4ED8",
+        }
+        for cat, diseases in _gastro_cats.items():
+            c = _gastro_colors.get(cat, "#5E7A8A")
+            st.markdown(
+                f"""<div style="margin-bottom:.5rem;padding:.5rem .8rem;background:#FFF;
+                border-radius:10px;border-left:4px solid {c};border:1px solid #EEF2F6;
+                box-shadow:0 1px 6px rgba(0,0,0,.05);">
+                <div style="font-size:.72rem;font-weight:700;color:{c};margin-bottom:.2rem;">{cat}</div>
+                <div style="font-size:.74rem;color:#5E7A8A;line-height:1.6;">{" · ".join(diseases)}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+        st.markdown(
+            """<div class="section-card" style="margin-top:.6rem;">
+                <div class="section-title">📊 Scores calculés</div>
+                <div style="font-size:.8rem;color:#5E7A8A;line-height:1.9;">
+                🩺 <b>Child-Pugh</b> — Cirrhose (Grade A/B/C)<br>
+                🩺 <b>MELD + MELD-Na</b> — Transplantation hépatique<br>
+                🩺 <b>CDAI + Harvey-Bradshaw</b> — Maladie de Crohn<br>
+                🩺 <b>Mayo Score</b> — Rectocolite hémorragique<br>
+                🩺 <b>Ranson + BISAP</b> — Pancréatite aiguë<br>
+                🩺 <b>Glasgow-Blatchford + Rockall</b> — Hémorragie digestive<br>
+                🩺 <b>TNM AJCC 8e</b> — Cancer colorectal<br>
+                🩺 <b>Classification de Paris</b> — Polypes colorectaux
+                </div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+
+    with col_upload:
+        st.markdown("<div class='section-card'><div class='section-title'>📤 Analyser une image digestive</div>", unsafe_allow_html=True)
+
+        uploaded = st.file_uploader(
+            "Importer une endoscopie, coloscopie, scanner abdominal ou échographie (PNG, JPG)",
+            type=["png","jpg","jpeg"], key="gastro_upload",
+        )
+        c_params = st.columns(2)
+        age_val  = c_params[0].number_input("Âge patient (ans)", 1, 120, 55, 1, key="gastro_age")
+        modality = c_params[1].selectbox("Modalité", ["Endoscopie (EOGD)","Coloscopie","Scanner abdominal","Échographie","IRM abdominale"], key="gastro_mod")
+
+        c2 = st.columns(2)
+        hb_val  = c2[0].number_input("Hémoglobine (g/dL)", 4.0, 20.0, 13.0, 0.5, key="gastro_hb")
+        sbp_val = c2[1].number_input("PAS (mmHg)", 50, 200, 120, 5, key="gastro_sbp")
+
+        if uploaded:
+            st.image(uploaded, caption=uploaded.name, use_container_width=True)
+
+        if st.button("🩺 Lancer l'analyse GastroAI", use_container_width=True, key="btn_gastro"):
+            if not uploaded:
+                st.warning("⚠️ Veuillez importer une image digestive.")
+            else:
+                with st.spinner("🧠 GastroAI — EfficientNet-B5 · Child-Pugh · CDAI · Blatchford · Grad-CAM…"):
+                    time.sleep(0.4)
+                    suffix = Path(uploaded.name).suffix or ".jpg"
+                    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                        tmp.write(uploaded.getbuffer()); temp_path = tmp.name
+                    result = predict_gastro(
+                        image_path=temp_path,
+                        params={
+                            "age": age_val, "age_over_55": age_val >= 55, "age_over_60": age_val >= 60,
+                            "hemoglobin": hb_val, "systolic_bp": sbp_val,
+                            "modality": modality,
+                        }
+                    )
+                    st.session_state["gastro_result"]   = result
+                    st.session_state["gastro_img_name"] = uploaded.name
+                    try:
+                        pdf = generate_gastro_report(result, patient_info={
+                            "age": age_val, "modality": modality,
+                        })
+                        st.session_state["gastro_pdf"] = pdf
+                    except Exception:
+                        pass
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        res = st.session_state.get("gastro_result") or {}
+        if res.get("status") == "success":
+            pred    = res["prediction"]
+            conf    = res["confidence"]
+            urgency = res.get("overall_urgency","—")
+            color   = res["clinical_profile"]["color"]
+            action  = res["recommended_action"]
+            safety  = res["clinical_safety"]
+
+            if safety.get("level") in ("critical","emergency"):
+                st.error(f"🚨 {safety['message']}")
+            elif safety.get("level") == "warning":
+                st.warning(f"⚠️ {safety['message']}")
+
+            st.markdown(
+                f"""<div style="background:{color}12;border:1.5px solid {color}55;
+                border-radius:14px;padding:1rem 1.2rem;margin-bottom:.8rem;">
+                <div style="font-size:.72rem;font-weight:700;color:{color};text-transform:uppercase;margin-bottom:.3rem;">
+                🩺 DIAGNOSTIC GASTROAI — Confiance : {conf:.1%}</div>
+                <div style="font-size:1.10rem;font-weight:800;color:{color};margin-bottom:.4rem;">{pred}</div>
+                <div style="font-size:.82rem;color:#5E7A8A;">{res['clinical_profile'].get('pattern','—')}</div>
+                <div style="font-size:.78rem;color:{color};font-weight:600;margin-top:.4rem;">
+                ⚡ Urgence : {urgency} &nbsp;|&nbsp; ICD-10 : {res['clinical_profile'].get('icd10','—')} &nbsp;|&nbsp;
+                Modalité : {res['clinical_profile'].get('modality','—')}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+            st.info(f"**Conduite IA :** {action}")
+
+            col_f = st.columns(3)
+            col_f[0].metric("Sévérité", res.get("severity","—"))
+            col_f[1].metric("Saignement", f"{res.get('quantification',{}).get('bleeding_ratio',0):.4f}")
+            col_f[2].metric("Polype détecté", f"{res.get('quantification',{}).get('polyp_ratio',0):.4f}")
+
+            heatmap = res.get("explainability",{}).get("heatmap_b64")
+            if heatmap:
+                st.markdown(
+                    f"""<div style="text-align:center;margin:.8rem 0;">
+                    <img src="data:image/png;base64,{heatmap}"
+                         style="border-radius:12px;max-width:100%;border:1.5px solid {color}55;"/>
+                    <div style="font-size:.75rem;color:#8AABB8;margin-top:.3rem;">
+                    Grad-CAM — Zone : {res['explainability'].get('anatomic_zone','—')}</div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+            scores = res.get("clinical_scores",{})
+            with st.expander("📊 Scores cliniques — Child-Pugh · MELD · CDAI · Blatchford"):
+                s1, s2 = st.columns(2)
+                cp  = scores.get("child_pugh",{}); ml = scores.get("meld",{})
+                cd  = scores.get("cdai",{});        bla = scores.get("blatchford",{})
+                ran = scores.get("ranson",{});       tnm = scores.get("tnm_colorectal",{})
+                with s1:
+                    st.markdown(f"**Child-Pugh :** `{cp.get('score','—')}/15` — Grade **{cp.get('grade','—')}**")
+                    st.markdown(f"→ Survie 1 an : {cp.get('survival_1y','—')} / Transplant : {'✅' if cp.get('transplant') else '❌'}")
+                    st.markdown(f"**MELD :** `{ml.get('meld','—')}` — MELD-Na : `{ml.get('meld_na','—')}`")
+                    st.markdown(f"→ Mortalité 90j : **{ml.get('mortality_90d','—')}**")
+                    st.markdown(f"**CDAI :** `{cd.get('score','—')}` — {cd.get('activity','—')}")
+                with s2:
+                    st.markdown(f"**Blatchford :** `{bla.get('score','—')}` — Risque : **{bla.get('risk','—')}**")
+                    st.markdown(f"→ Endoscopie : {bla.get('endoscopy','—')}")
+                    st.markdown(f"**Ranson :** `{ran.get('score','—')}/11` — {ran.get('severity','—')}")
+                    st.markdown(f"**TNM :** `{tnm.get('T','?')} {tnm.get('N','?')} {tnm.get('M','?')}` — Stade **{tnm.get('stage','—')}**")
+                    st.markdown(f"→ Survie 5 ans : **{tnm.get('survival_5y','—')}**")
+
+            diff = res.get("differential_diagnosis",[])
+            if diff:
+                st.markdown("**Diagnostic différentiel (Top 4) :**")
+                d_cols = st.columns(len(diff))
+                for col_d, d in zip(d_cols, diff):
+                    col_d.metric(
+                        d["class"][:20]+"…" if len(d["class"])>22 else d["class"],
+                        f"{d['probability']:.1%}", delta=d.get("urgency","—"),
+                    )
+
+            quant = res.get("quantification",{})
+            with st.expander("🔬 Quantification lésionnelle"):
+                q1,q2,q3,q4 = st.columns(4)
+                q1.metric("Surface lésions", f"{quant.get('lesion_coverage_pct',0):.1f}%")
+                q2.metric("Ulcération", f"{quant.get('ulcer_ratio',0):.4f}")
+                q3.metric("Inflammation", f"{quant.get('mucosal_inflammation',0):.4f}")
+                q4.metric("Foie brightness", f"{quant.get('hepatic_brightness',0):.3f}")
+
+            pdf = st.session_state.get("gastro_pdf")
+            if pdf:
+                st.download_button(
+                    "📥 Télécharger le rapport PDF médical",
+                    data=pdf,
+                    file_name=f"GastroAI_{st.session_state.get('gastro_img_name','rapport')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="dl_gastro_pdf",
+                )
+
+            with st.expander("🔍 JSON complet"):
+                st.json({k:v for k,v in res.items() if k not in ("explainability","probabilities")})
+
+        else:
+            st.markdown(
+                """<div style="border:2px dashed #DDE8EE;border-radius:14px;padding:2.5rem;
+                text-align:center;color:#8AABB8;">
+                <div style="font-size:2.5rem;margin-bottom:.5rem;">🩺</div>
+                <div style="font-size:.92rem;">Importer une endoscopie, coloscopie ou imagerie abdominale</div>
+                <div style="font-size:.78rem;margin-top:.3rem;opacity:.7;">
+                EOGD · Coloscopie · Scanner TDM · Échographie · Capsule vidéo-endoscopique</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+        st.markdown(
+            "<div class='disclaimer' style='margin-top:.8rem;'>⚠️ GastroAI — Outil d'aide au diagnostic gastroentérologique. "
+            "Toute pathologie digestive doit être confirmée par un gastroentérologue qualifié.</div>",
+            unsafe_allow_html=True,
+        )
+
+
+def _render_histopath() -> None:
+    """HistoPath AI v1.0 — Anatomopathologie · Histologie numérique."""
+    from modules.histopath_ai import predict_histopath, generate_histopath_report
+
+    for _k in ("histo_result", "histo_pdf"):
+        if _k not in st.session_state:
+            st.session_state[_k] = None
+
+    st.markdown(
+        """<div class="page-header" style="background:linear-gradient(135deg,#1A0D2E,#7C3AED);">
+            <h1>🔬 HistoPath AI — Module 15 · v1.0</h1>
+            <p>Anatomopathologie · 8 types de cancer · Nottingham · Gleason/ISUP · HER2 · Ki-67 · TNM · Budding · SHAP</p>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    col_info, col_params = st.columns([1, 1.5], gap="large")
+
+    with col_info:
+        st.markdown(
+            """<div class="section-card">
+                <div class="section-title">🔬 Cancers analysés</div>
+                <div style="font-size:.8rem;color:#5E7A8A;line-height:2.0;">
+                🩷 <b>Sein</b> — CCI · CLI · DCIS · LCIS · Triple Négatif<br>
+                🟤 <b>Colorectal</b> — Adénocarcinome · Polypes dysplasiques<br>
+                🔵 <b>Prostate</b> — Adénocarcinome Gleason<br>
+                🫁 <b>Poumon</b> — Adénocarcinome · Épidermoïde · CPPC<br>
+                🟡 <b>Gastrique</b> — Adénocarcinome · Dysplasie<br>
+                🔴 <b>Foie</b> — Carcinome hépatocellulaire<br>
+                🟣 <b>Col utérin</b> — CIN 1/2/3 · Carcinome invasif<br>
+                ⚪ <b>Hématopathologie</b> — Lymphome · LLC · Myélome
+                </div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            """<div class="section-card" style="margin-top:.6rem;">
+                <div class="section-title">📊 Scores calculés</div>
+                <div style="font-size:.8rem;color:#5E7A8A;line-height:1.9;">
+                🔬 <b>Nottingham</b> — Grade 1/2/3 (Elston-Ellis)<br>
+                🔬 <b>Gleason + ISUP</b> — Grade Group 1–5<br>
+                🔬 <b>Ki-67</b> — Index de prolifération (%)<br>
+                🔬 <b>HER2</b> — IHC 0/1+/2+/3+ + FISH<br>
+                🔬 <b>ER/PR</b> — Récepteurs hormonaux (%)<br>
+                🔬 <b>TNM patho</b> — Stade pTNM AJCC 8e<br>
+                🔬 <b>Tumor Budding</b> — ITBCC 2016 (Bd1–3)<br>
+                🔬 <b>CIN / Bethesda</b> — Col utérin<br>
+                🔬 <b>SHAP</b> — Feature importance IA
+                </div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+
+    with col_params:
+        st.markdown("<div class='section-card'><div class='section-title'>🔬 Paramètres cliniques & IHC</div>", unsafe_allow_html=True)
+
+        cancer_type = st.selectbox("Type de cancer", [
+            "breast","prostate","colorectal","lung","cervical","liver","gastric","hemato","general"
+        ], format_func=lambda x: {
+            "breast":"Cancer du sein","prostate":"Cancer de la prostate",
+            "colorectal":"Cancer colorectal","lung":"Cancer pulmonaire",
+            "cervical":"Col utérin / CIN","liver":"Carcinome hépatocellulaire",
+            "gastric":"Cancer gastrique","hemato":"Hématopathologie","general":"Général",
+        }.get(x, x), key="histo_cancer_type")
+
+        c1, c2 = st.columns(2)
+        ki67    = c1.number_input("Ki-67 (%)", 0, 100, 20, 1, key="histo_ki67")
+        her2    = c2.selectbox("HER2 IHC", ["0","1+","2+","3+"], key="histo_her2")
+        er_pct  = c1.number_input("ER (%)", 0, 100, 75, 5, key="histo_er")
+        pr_pct  = c2.number_input("PR (%)", 0, 100, 50, 5, key="histo_pr")
+        tub     = c1.selectbox("Tubules (Nottingham)", [1,2,3], index=1, key="histo_tub")
+        nuc     = c2.selectbox("Noyaux (Nottingham)", [1,2,3], index=1, key="histo_nuc")
+
+        c3, c4 = st.columns(2)
+        pt      = c3.selectbox("pT Stage", ["T1","T2","T3","T4"], index=1, key="histo_pt")
+        pn      = c4.selectbox("pN Stage", ["N0","N1","N2","N3"], index=0, key="histo_pn")
+
+        vasc_inv = st.checkbox("Invasion lymphovasculaire (LVI+)", key="histo_vasc")
+        margin   = st.selectbox("Marges chirurgicales", ["clear","close","involved"], key="histo_margin")
+
+        if st.button("🔬 Analyser la lame histologique", use_container_width=True, key="btn_histo"):
+            with st.spinner("🧠 HistoPath AI — Nottingham · Gleason · HER2 · Ki-67 · SHAP…"):
+                time.sleep(0.3)
+                result = predict_histopath(params={
+                    "cancer_type": cancer_type,
+                    "ki67_percent": ki67,
+                    "her2_score": her2,
+                    "er_percent": er_pct,
+                    "pr_percent": pr_pct,
+                    "tubule_formation": tub,
+                    "nuclear_pleomorphism": nuc,
+                    "pt_stage": pt, "pn_stage": pn,
+                    "lymphovascular_invasion": vasc_inv,
+                    "margin_status": margin,
+                })
+                st.session_state["histo_result"] = result
+                try:
+                    pdf = generate_histopath_report(result)
+                    st.session_state["histo_pdf"] = pdf
+                except Exception:
+                    pass
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        res = st.session_state.get("histo_result") or {}
+        if res.get("status") == "success":
+            pred    = res["prediction"]
+            conf    = res["confidence"]
+            urgency = res.get("clinical_profile",{}).get("urgency","—")
+            color   = res.get("clinical_profile",{}).get("color","#7C3AED")
+            aggr    = res.get("aggressiveness_score",0)
+            safety  = res.get("clinical_safety",{})
+
+            if safety.get("level") == "critical":
+                st.error(f"🚨 {safety['message']}")
+            elif safety.get("level") == "warning":
+                st.warning(f"⚠️ {safety['message']}")
+
+            st.markdown(
+                f"""<div style="background:{color}12;border:1.5px solid {color}55;
+                border-radius:14px;padding:1rem 1.2rem;margin-bottom:.8rem;">
+                <div style="font-size:.72rem;font-weight:700;color:{color};margin-bottom:.3rem;">
+                🔬 DIAGNOSTIC HISTOPATH AI — Confiance : {conf:.1%}</div>
+                <div style="font-size:1.10rem;font-weight:800;color:{color};margin-bottom:.4rem;">{pred}</div>
+                <div style="font-size:.82rem;color:#5E7A8A;">Cancer : {res.get('cancer_type','—')}</div>
+                <div style="font-size:.78rem;color:{color};font-weight:600;margin-top:.4rem;">
+                ⚡ Urgence : {urgency} &nbsp;|&nbsp; Agressivité : {aggr:.0%}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+            st.info(f"**Conduite IA :** {res.get('recommended_action','—')}")
+
+            # Biomarqueurs critiques
+            cf = res.get("critical_findings",[])
+            if cf:
+                st.markdown("**🚨 Findings critiques :**")
+                for f in cf:
+                    sev = f.get("severity","")
+                    icon = {"CRITIQUE":"🔴","ÉLEVÉ":"🟠","MODÉRÉ":"🟡","INFO":"🟢"}.get(sev,"⚪")
+                    st.markdown(f"{icon} **{f.get('finding','')}** — {f.get('detail','')}")
+
+            # IHC
+            ihc = res.get("ihc_summary",{})
+            st.markdown(
+                f"""<div style="background:#FAF5FF;border:1px solid #DDD6FE;border-radius:10px;
+                padding:.8rem 1rem;margin:.5rem 0;font-size:.82rem;">
+                <b>ER</b> : {ihc.get('er','—')} &nbsp;|&nbsp;
+                <b>PR</b> : {ihc.get('pr','—')} &nbsp;|&nbsp;
+                <b>HER2</b> : {ihc.get('her2','—')} &nbsp;|&nbsp;
+                <b>Ki-67</b> : {ihc.get('ki67','—')} &nbsp;|&nbsp;
+                <b>MSI</b> : {ihc.get('msi','—')}
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+            # Scores
+            scores = res.get("clinical_scores",{})
+            with st.expander("📊 Scores anatomopathologiques"):
+                s1, s2 = st.columns(2)
+                nott = scores.get("nottingham",{}); gl = scores.get("gleason",{})
+                tnm  = scores.get("tnm",{});        cin = scores.get("cin",{})
+                with s1:
+                    if nott:
+                        st.markdown(f"**Nottingham :** Grade `{nott.get('grade_number','—')}` — {nott.get('grade_label','—')}")
+                        st.markdown(f"→ Survie 5 ans : **{nott.get('five_year_survival','—')}**")
+                    if gl:
+                        st.markdown(f"**Gleason :** `{gl.get('gleason_score','—')}` — ISUP `{gl.get('isup_grade','—')}`")
+                    if tnm:
+                        st.markdown(f"**TNM :** `p{tnm.get('pt','?')} p{tnm.get('pn','?')} {tnm.get('pm','?')}` — Stade **{tnm.get('stage_roman','—')}**")
+                with s2:
+                    if cin:
+                        st.markdown(f"**CIN :** {cin.get('cin_grade','—')} — {cin.get('bethesda_category','—')}")
+                    bud = scores.get("tumor_budding",{})
+                    if bud:
+                        st.markdown(f"**Budding :** {bud.get('grade_label','—')} ({bud.get('bud_count','?')} bourgeons)")
+                    ed = scores.get("edmondson_steiner",{})
+                    if ed:
+                        st.markdown(f"**Edmondson :** Grade `{ed.get('grade','—')}` — {ed.get('differentiation','—')}")
+
+            # SHAP
+            fi = res.get("explainability",{}).get("feature_importance",{})
+            if fi:
+                with st.expander("🧠 SHAP Feature Importance"):
+                    top5 = sorted(fi.items(), key=lambda x:-x[1])[:5]
+                    for feat, score in top5:
+                        st.markdown(f"**{feat}** : {score:.0f}%")
+
+            # Risque rechute
+            rr = res.get("clinical_profile",{}).get("recurrence_risk",{})
+            if rr:
+                r1,r3,r5,r10 = st.columns(4)
+                r1.metric("Rechute 1 an",  f"{rr.get('1an',0):.0%}")
+                r3.metric("Rechute 3 ans", f"{rr.get('3ans',0):.0%}")
+                r5.metric("Rechute 5 ans", f"{rr.get('5ans',0):.0%}")
+                r10.metric("Rechute 10 ans",f"{rr.get('10ans',0):.0%}")
+
+            pdf = st.session_state.get("histo_pdf")
+            if pdf:
+                st.download_button("📥 Télécharger le rapport PDF", data=pdf,
+                                   file_name="HistoPath_rapport.pdf", mime="application/pdf",
+                                   use_container_width=True, key="dl_histo_pdf")
+
+            with st.expander("🔍 JSON complet"):
+                st.json({k:v for k,v in res.items() if k not in ("probabilities",)})
+
+        else:
+            st.markdown(
+                """<div style="border:2px dashed #DDD6FE;border-radius:14px;padding:2.5rem;
+                text-align:center;color:#8AABB8;">
+                <div style="font-size:2.5rem;margin-bottom:.5rem;">🔬</div>
+                <div style="font-size:.92rem;">Renseigner les paramètres IHC et cliniques puis lancer l'analyse</div>
+                <div style="font-size:.78rem;margin-top:.3rem;opacity:.7;">
+                Compatible : Lames HE · IHC · WSI · TCGA · CAP Protocols</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+        st.markdown(
+            "<div class='disclaimer' style='margin-top:.8rem;'>⚠️ HistoPath AI — Aide au diagnostic anatomopathologique. "
+            "Validation obligatoire par un anatomopathologiste diplômé avant toute décision thérapeutique.</div>",
+            unsafe_allow_html=True,
+        )
+
+
+def _render_hemato() -> None:
+    from modules.hemato_ai.predictor import predict_hemato
+    from modules.hemato_ai.report import build_hemato_pdf_report, build_hemato_html_report
+
+    st.markdown(
+        """
+        <div class="page-header" style="background:linear-gradient(135deg,#8B0000,#C0392B);">
+            <h1>🩸 HematoVision AI v2.0</h1>
+            <p>NFS · Cytologie · Biochimie · Génétique moléculaire · WHO 2022 · ELN 2022 · ICC 2022</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    for _k in ("hv_result", "hv_pdf"):
+        if _k not in st.session_state:
+            st.session_state[_k] = None
+
+    col_form, col_res = st.columns([1, 1.3], gap="large")
+
+    with col_form:
+        st.markdown("<div class='section-card'><div class='section-title'>🔬 Paramètres NFS & Cliniques</div>", unsafe_allow_html=True)
+
+        with st.expander("🩸 Hémogramme (NFS)", expanded=True):
+            c1, c2, c3 = st.columns(3)
+            hb   = c1.number_input("Hb (g/dL)", 1.0, 25.0, 13.5, 0.1, key="hv_hb")
+            wbc  = c2.number_input("GB (G/L)",  0.1, 200.0, 7.0, 0.1, key="hv_wbc")
+            plt  = c3.number_input("Plt (G/L)", 1.0, 2000.0, 220.0, 1.0, key="hv_plt")
+            c4, c5, c6 = st.columns(3)
+            vgm  = c4.number_input("VGM (fL)",  50.0, 150.0, 88.0, 0.5, key="hv_vgm")
+            tcmh = c5.number_input("TCMH (pg)", 15.0, 45.0, 29.0, 0.5, key="hv_tcmh")
+            rdw  = c6.number_input("RDW (%)",   8.0, 30.0, 12.5, 0.1, key="hv_rdw")
+            c7, c8 = st.columns(2)
+            neut = c7.number_input("Neutro (G/L)", 0.0, 80.0, 4.5, 0.1, key="hv_neut")
+            lymp = c8.number_input("Lympho (G/L)", 0.0, 50.0, 2.0, 0.1, key="hv_lymp")
+            c9, c10, c11 = st.columns(3)
+            blst = c9.number_input("Blastes (%)", 0.0, 100.0, 0.0, 0.5, key="hv_blst")
+            reti = c10.number_input("Réticulocytes (%)", 0.0, 20.0, 1.5, 0.1, key="hv_reti")
+            sex  = c11.selectbox("Sexe", ["M", "F"], key="hv_sex")
+
+        with st.expander("🧪 Biochimie & Coagulation"):
+            b1, b2, b3 = st.columns(3)
+            ferr = b1.number_input("Ferritine (µg/L)", 0.0, 5000.0, 80.0, 1.0, key="hv_ferr")
+            ldh  = b2.number_input("LDH (UI/L)", 0.0, 5000.0, 180.0, 5.0, key="hv_ldh")
+            b12  = b3.number_input("B12 (pg/mL)", 0.0, 2000.0, 400.0, 10.0, key="hv_b12")
+            b4, b5, b6 = st.columns(3)
+            fola = b4.number_input("Folates (ng/mL)", 0.0, 30.0, 8.0, 0.1, key="hv_fola")
+            hapt = b5.number_input("Haptoglobine (g/L)", 0.0, 5.0, 1.2, 0.1, key="hv_hapt")
+            tsat = b6.number_input("Sat. transf. (%)", 0.0, 100.0, 30.0, 1.0, key="hv_tsat")
+            b7, b8 = st.columns(2)
+            fibr = b7.number_input("Fibrinogène (g/L)", 0.0, 10.0, 3.0, 0.1, key="hv_fibr")
+            ddim = b8.selectbox("D-Dimères", [0, 1, 2], format_func=lambda x: ["Normal","Modéré","Élevé"][x], key="hv_ddim")
+            coom = st.checkbox("Coombs direct positif", key="hv_coom")
+
+        with st.expander("🧬 Cytogénétique & Biologie moléculaire"):
+            g1, g2, g3 = st.columns(3)
+            npm1 = g1.checkbox("NPM1 muté", key="hv_npm1")
+            flt3 = g2.checkbox("FLT3-ITD", key="hv_flt3")
+            bcr  = g3.checkbox("BCR-ABL1", key="hv_bcr")
+            g4, g5, g6 = st.columns(3)
+            jak2 = g4.checkbox("JAK2 V617F", key="hv_jak2")
+            tp53 = g5.checkbox("TP53 muté", key="hv_tp53")
+            sf3b = g6.checkbox("SF3B1 muté", key="hv_sf3b")
+            g7, g8, g9 = st.columns(3)
+            t821 = g7.checkbox("t(8;21)", key="hv_t821")
+            i16  = g8.checkbox("inv(16)", key="hv_i16")
+            d5q  = g9.checkbox("del(5q)", key="hv_d5q")
+            g10, g11 = st.columns(2)
+            calr = g10.checkbox("CALR muté", key="hv_calr")
+            ckary= g11.checkbox("Caryotype complexe", key="hv_ckary")
+
+        with st.expander("🌍 Contexte clinique & Paludisme"):
+            cl1, cl2 = st.columns(2)
+            age  = cl1.number_input("Âge (ans)", 0, 120, 45, 1, key="hv_age")
+            ctx  = cl2.selectbox("Contexte", ["general","lam","lymphome","myelome","smd","paludisme","drépanocytose"], key="hv_ctx")
+            cl3, cl4 = st.columns(2)
+            para = cl3.number_input("Parasitémie (%)", 0.0, 100.0, 0.0, 0.1, key="hv_para")
+            spe  = cl4.selectbox("Plasmodium", ["P. falciparum","P. vivax","P. malariae","P. ovale"], key="hv_spe")
+            cl5, cl6 = st.columns(2)
+            rdt  = cl5.checkbox("TDR paludisme positif", key="hv_rdt")
+            splen= cl6.checkbox("Splénomégalie", key="hv_splen")
+            b_sym= st.checkbox("Symptômes B (fièvre / sueurs / perte poids)", key="hv_bsym")
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        if st.button("🩸 Lancer l'analyse HematoVision AI", use_container_width=True, key="btn_hemato"):
+            params = {
+                "hemoglobin": hb, "wbc": wbc, "platelets": plt,
+                "vgm": vgm, "tcmh": tcmh, "rdw": rdw,
+                "neutrophils": neut, "lymphocytes": lymp,
+                "blast_pct": blst, "reticulocytes_pct": reti, "sex": sex,
+                "ferritin": ferr, "ldh": ldh, "b12_pg_ml": b12,
+                "folate_ng_ml": fola, "haptoglobin": hapt,
+                "transferrin_sat_pct": tsat, "fibrinogen": fibr,
+                "d_dimers_elevated": ddim, "direct_coombs": coom,
+                "npm1_mutated": npm1, "flt3_itd": flt3, "bcr_abl1": bcr,
+                "jak2_v617f": jak2, "tp53_mutated": tp53, "sf3b1_mutated": sf3b,
+                "t_8_21": t821, "inv_16": i16, "del_5q": d5q,
+                "calr_mutated": calr, "complex_karyotype": ckary,
+                "age": age, "disease_context": ctx,
+                "parasitemia_pct": para, "plasmodium_species": spe,
+                "rdt_positive": rdt, "splenomegaly": splen, "b_symptoms": b_sym,
+                "malaria_suspected": (para > 0 or rdt),
+                "ldh_elevated": ldh > 250,
+            }
+            with st.spinner("🧠 Analyse hématologique en cours..."):
+                try:
+                    res = predict_hemato(params=params)
+                    st.session_state["hv_result"] = res
+                    try:
+                        pdf = build_hemato_pdf_report(res)
+                        st.session_state["hv_pdf"] = pdf
+                    except Exception:
+                        st.session_state["hv_pdf"] = None
+                except Exception as e:
+                    st.error(f"Erreur analyse : {e}")
+
+    with col_res:
+        res = st.session_state.get("hv_result")
+        if res and res.get("status") == "success":
+            pred    = res.get("prediction", "—")
+            conf    = res.get("confidence", 0.0)
+            urgency = res.get("clinical_profile", {}).get("urgency", "—")
+            color   = res.get("clinical_profile", {}).get("color", "#566573")
+            action  = res.get("recommended_action", "—")
+
+            _URG_BG = {"Critique":"#FDECEA","Élevée":"#FEF0E7","Modérée":"#FEF9E7","Faible":"#EAFAF1"}
+            bg = _URG_BG.get(urgency, "#F7F9FC")
+
+            st.markdown(
+                f"""<div style="background:{bg};border-left:6px solid {color};
+                border-radius:0 14px 14px 0;padding:1.2rem 1.4rem;margin-bottom:0.8rem;">
+                <div style="font-size:1.15rem;font-weight:800;color:{color};">🩸 {pred}</div>
+                <div style="font-size:0.88rem;color:#5E7A8A;margin-top:4px;">
+                Confiance : <b>{conf:.1%}</b> &nbsp;·&nbsp; Urgence : <b style="color:{color};">{urgency}</b>
+                </div>
+                <div style="font-size:0.82rem;color:#1A2B3C;margin-top:8px;border-top:1px solid {color}44;padding-top:6px;">
+                <b>Action :</b> {action}
+                </div></div>""",
+                unsafe_allow_html=True,
+            )
+
+            # Alertes cliniques
+            alerts = res.get("alerts", [])
+            if alerts:
+                _ALT_BG  = {"CRITICAL":"#FDECEA","HIGH":"#FEF0E7","WARNING":"#FEF9E7","INFO":"#EBF4FD"}
+                _ALT_BD  = {"CRITICAL":"#922B21","HIGH":"#E74C3C","WARNING":"#E67E22","INFO":"#2E86DE"}
+                for a in alerts[:6]:
+                    lvl = a.get("level","INFO")
+                    st.markdown(
+                        f"""<div style="background:{_ALT_BG.get(lvl,'#F7F9FC')};
+                        border-left:4px solid {_ALT_BD.get(lvl,'#999')};
+                        border-radius:0 8px 8px 0;padding:8px 12px;margin-bottom:6px;">
+                        <div style="font-size:0.82rem;font-weight:700;color:#1A2B3C;">
+                        {a.get('icon','')} [{lvl}] {a.get('title','')}</div>
+                        <div style="font-size:0.76rem;color:#5E7A8A;margin-top:2px;">{a.get('message','')}</div>
+                        <div style="font-size:0.72rem;color:#8AABB8;margin-top:2px;font-style:italic;">
+                        Action : {a.get('clinical_action','')[:90]}</div></div>""",
+                        unsafe_allow_html=True,
+                    )
+
+            # Scores cliniques
+            scores = res.get("clinical_scores", {})
+            nfs    = scores.get("nfs", {})
+            if nfs:
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Anémie", nfs.get("anemia_severity", "—"))
+                c2.metric("Leucocytes", f"{nfs.get('wbc_g_l', 0):.1f} G/L")
+                c3.metric("Plaquettes", f"{nfs.get('platelets_g_l', 0):.0f} G/L")
+
+            eln = scores.get("eln_aml", {})
+            if eln:
+                st.markdown(
+                    f"""<div style="background:#F7F9FC;border-left:4px solid #8E44AD;
+                    border-radius:0 8px 8px 0;padding:8px 12px;margin-top:6px;">
+                    <b>ELN AML 2022 :</b> {eln.get('risk_category','—')}
+                    <span style="font-size:0.76rem;color:#5E7A8A;"> — RC attendue : {eln.get('cr_rate','—')} · OS 3 ans : {eln.get('os_3yr','—')}</span>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+            ipss = scores.get("ipss_r", {})
+            if ipss:
+                st.markdown(
+                    f"""<div style="background:#F7F9FC;border-left:4px solid #2E4A8E;
+                    border-radius:0 8px 8px 0;padding:8px 12px;margin-top:6px;">
+                    <b>IPSS-R :</b> Score {ipss.get('score','—')} — {ipss.get('risk_category','—')}
+                    <span style="font-size:0.76rem;color:#5E7A8A;"> · Survie médiane : {ipss.get('median_survival_yr','—')}</span>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+            malaria = scores.get("malaria", {})
+            if malaria:
+                st.markdown(
+                    f"""<div style="background:#FEF9E7;border-left:4px solid #E67E22;
+                    border-radius:0 8px 8px 0;padding:8px 12px;margin-top:6px;">
+                    <b>🦟 Paludisme :</b> {malaria.get('grade','—')} — {malaria.get('severity','—')}
+                    <span style="font-size:0.76rem;color:#5E7A8A;"> · {malaria.get('treatment_urgency','—')}</span>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+            # Explainability
+            expl = res.get("explainability", {})
+            top3 = expl.get("top_3_drivers", [])
+            if top3:
+                top3_str = " · ".join(f"**{k}** ({v:.0f}%)" for k, v in top3)
+                st.markdown(f"**🧠 Top 3 facteurs :** {top3_str}")
+
+            # Probabilités top 5
+            probs = res.get("probabilities", {})
+            if probs:
+                with st.expander("📊 Probabilités diagnostiques (Top 5)"):
+                    top5 = sorted(probs.items(), key=lambda x: -x[1])[:5]
+                    for dx, p_val in top5:
+                        st.progress(p_val, text=f"{dx[:45]} — {p_val:.1%}")
+
+            # Sécurité IA
+            safety = res.get("clinical_safety", {})
+            if safety.get("level") in ("critical", "warning"):
+                icon = "🚨" if safety["level"] == "critical" else "⚠️"
+                st.warning(f"{icon} {safety.get('message','')}")
+
+            # PDF download
+            pdf = st.session_state.get("hv_pdf")
+            if pdf:
+                st.download_button(
+                    "📥 Télécharger le rapport PDF",
+                    data=pdf,
+                    file_name="HematoVision_rapport.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="dl_hv_pdf",
+                )
+
+            with st.expander("🔍 Résultat JSON complet"):
+                st.json({k: v for k, v in res.items() if k not in ("probabilities",)})
+
+        else:
+            st.markdown(
+                """<div style="border:2px dashed #FADADD;border-radius:14px;padding:2.5rem;
+                text-align:center;color:#8AABB8;">
+                <div style="font-size:2.5rem;margin-bottom:.5rem;">🩸</div>
+                <div style="font-size:.92rem;">Renseigner les paramètres NFS et cliniques puis lancer l'analyse</div>
+                <div style="font-size:.78rem;margin-top:.3rem;opacity:.7;">
+                NFS · Biochimie · Génétique · Paludisme · WHO 2022 · ELN 2022 · ICC 2022</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+    st.markdown(
+        "<div class='disclaimer' style='margin-top:.8rem;'>⚠️ HematoVision AI v2.0 — Outil d'aide à la décision hématologique. "
+        "Ne remplace pas le jugement clinique d'un hématologue diplômé. "
+        "WHO 2022 · ICC 2022 · ELN 2022 · NCCN 2023 · ASH/EHA Guidelines.</div>",
+        unsafe_allow_html=True,
+    )
+
+
 def page_maladies(sous_page: str) -> None:
     _MODULE_MAP = {
+        # RetinaVision AI géré via dispatch
         # DermAI géré via dispatch
-        "RetinaVision AI":   "retina",
+        # NeuroVision AI géré via dispatch
+        # GastroAI géré via dispatch
         "CardioSense AI":    "cardio",
-        "NeuroVision AI":    "neuro",
-        "GastroAI":          "gastro",
-        "HistoPath AI":      "histopath",
+        # HistoPath AI géré via dispatch
         "OsteoDetect AI":    "osteo",
         # SepsisPredict AI géré via dispatch
         "HepatoScan AI":     "hepato",
         "NephroAI":          "nephro",
-        "HematoVision AI":   "hemato",
         "GynoCare AI":       "gyno",
     }
     dispatch = {
@@ -4657,6 +5839,11 @@ def page_maladies(sous_page: str) -> None:
         "PulmoScan AI":     _render_pulmoscan,
         "SepsisPredict AI": _render_sepsis,
         "DermAI":           _render_derm,
+        "RetinaVision AI":  _render_retina,
+        "NeuroVision AI":   _render_neuro,
+        "GastroAI":         _render_gastro,
+        "HistoPath AI":     _render_histopath,
+        "HematoVision AI":  _render_hemato,
     }
     if sous_page in dispatch:
         dispatch[sous_page]()
