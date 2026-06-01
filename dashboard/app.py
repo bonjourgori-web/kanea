@@ -1153,10 +1153,10 @@ def page_accueil() -> None:
               <div style="display:flex;gap:.6rem;flex-wrap:wrap;">
                 <span style="background:rgba(39,174,96,0.15);border:1px solid rgba(39,174,96,0.35);
                      border-radius:999px;padding:.2rem .7rem;font-size:.72rem;font-weight:700;color:#6EE49E;">
-                     ✅ 5 Modules actifs</span>
+                     ✅ 9 Modules actifs</span>
                 <span style="background:rgba(46,134,222,0.15);border:1px solid rgba(46,134,222,0.35);
                      border-radius:999px;padding:.2rem .7rem;font-size:.72rem;font-weight:700;color:#7EC8F8;">
-                     🔬 ONNX · CPU uniquement</span>
+                     🔬 ONNX · XGBoost · CPU</span>
                 <span style="background:rgba(142,68,173,0.15);border:1px solid rgba(142,68,173,0.35);
                      border-radius:999px;padding:.2rem .7rem;font-size:.72rem;font-weight:700;color:#C89EF8;">
                      📄 Rapports PDF A4</span>
@@ -1171,9 +1171,9 @@ def page_accueil() -> None:
     # ── Compteurs statistiques ───────────────────────────────────────────────
     stats = [
         ("🧬", "17", "Modules IA", "#20B2AA"),
-        ("✅", "5",  "Modules actifs", "#27AE60"),
-        ("🖼️", "27 560", "Images NIH", "#2E86DE"),
-        ("🎯", "92.5%", "Accuracy malaria", "#E74C3C"),
+        ("✅", "9",  "Modules actifs", "#27AE60"),
+        ("🗄️", "150 k+", "Patients / images", "#2E86DE"),
+        ("🎯", "98.1%", "Best accuracy", "#E74C3C"),
         ("📄", "A4 PDF", "Rapports cliniques", "#8E44AD"),
         ("🌍", "Offline", "Sans cloud requis", "#E67E22"),
     ]
@@ -1195,10 +1195,12 @@ def page_accueil() -> None:
 
     st.markdown("<div style='height:1.8rem'></div>", unsafe_allow_html=True)
 
-    # ── Modules principaux (4 actifs) ────────────────────────────────────────
+    # ── Modules actifs (9) ───────────────────────────────────────────────────
     st.markdown(
         "<h2 style='font-size:1.2rem;font-weight:800;color:#1A2B3C;margin:0 0 1rem;'>"
-        "🔬 Modules IA actifs</h2>",
+        "🔬 Modules IA actifs "
+        "<span style='font-size:.82rem;font-weight:500;color:#27AE60;background:#E9F7EF;"
+        "border-radius:8px;padding:2px 10px;'>9 / 17</span></h2>",
         unsafe_allow_html=True,
     )
 
@@ -1206,88 +1208,136 @@ def page_accueil() -> None:
         {
             "icon": "🦠", "name": "MalariaScan AI", "version": "v3.0",
             "color": "#C0392B",
-            "desc": "Détection paludisme sur frottis sanguin — ResNet34 ONNX",
+            "desc": "Frottis sanguin — ResNet34 ONNX",
             "metrics": [("Accuracy", "92.5%"), ("AUC-ROC", "0.969"), ("Dataset", "27 560")],
-            "tags": ["ONNX", "CAM", "PDF A4", "NIH"],
+            "tags": ["ONNX", "CAM", "NIH"],
             "nav": "Paludisme",
         },
         {
             "icon": "📊", "name": "NutriTrack AI", "version": "v3.0",
             "color": "#E67E22",
-            "desc": "Statut nutritionnel enfant/adulte — RF + XGBoost + SHAP",
+            "desc": "Nutrition enfant/adulte — RF + XGBoost",
             "metrics": [("Accuracy", "91.3%"), ("F1-score", "90.5%"), ("Entrées", "8 vars")],
-            "tags": ["SHAP", "Z-scores OMS", "PDF A4"],
+            "tags": ["SHAP", "OMS", "PDF"],
             "nav": "Nutrition",
         },
         {
             "icon": "🦴", "name": "BioID AI", "version": "v2",
             "color": "#8E44AD",
-            "desc": "Profil biologique médico-légal — VotingClassifier + PCA",
+            "desc": "Profil médico-légal — PCA + VotingClassifier",
             "metrics": [("Accuracy", "95%"), ("Variables", "23"), ("Méthode", "Trotter-Gleser")],
-            "tags": ["FORDISC", "PCA", "PDF médico-légal"],
+            "tags": ["FORDISC", "PCA", "PDF"],
             "nav": "Médico-légal",
         },
         {
             "icon": "🎗️", "name": "BreastCancer AI", "version": "v3.0",
             "color": "#D91E7A",
-            "desc": "Cancer du sein sur mammographie — EfficientNet-B0 ONNX",
+            "desc": "Mammographie — EfficientNet-B0 ONNX",
             "metrics": [("AUC-ROC", "0.996"), ("Classes", "3"), ("ONNX", "16 MB")],
-            "tags": ["ONNX", "TNM", "Grade", "Ki67", "ER/PR/HER2"],
+            "tags": ["ONNX", "TNM", "Ki67"],
             "nav": "Cancer sein",
+        },
+        {
+            "icon": "🩸", "name": "HematoVision AI", "version": "v2.0",
+            "color": "#8B0000",
+            "desc": "NFS complète — WHO 2022 · ELN 2022 · ICC 2022",
+            "metrics": [("Classes", "14"), ("Scores", "ELN/IPSS-R"), ("Rapport", "PDF A4")],
+            "tags": ["WHO 2022", "ELN", "NFS"],
+            "nav": "HematoVision AI",
+        },
+        {
+            "icon": "❤️", "name": "CardioSense AI", "version": "v1.0",
+            "color": "#E74C3C",
+            "desc": "ECG arythmies — XGBoost MIT-BIH",
+            "metrics": [("Accuracy", "98.1%"), ("AUC-ROC", "0.994"), ("Dataset", "87k ECG")],
+            "tags": ["XGBoost", "MIT-BIH", "ECG"],
+            "nav": "CardioSense AI",
+        },
+        {
+            "icon": "💧", "name": "NephroAI", "version": "v1.0",
+            "color": "#2E86DE",
+            "desc": "Risque rénal/diabète — XGBoost BRFSS2015",
+            "metrics": [("Accuracy", "75.2%"), ("AUC-ROC", "0.829"), ("Dataset", "70k")],
+            "tags": ["XGBoost", "SHAP", "BRFSS"],
+            "nav": "NephroAI",
+        },
+        {
+            "icon": "🎗️", "name": "GynoCare AI", "version": "v1.0",
+            "color": "#9B59B6",
+            "desc": "Col utérin CIN — XGBoost Colposcopie",
+            "metrics": [("Accuracy", "96.6%"), ("AUC-ROC", "0.992"), ("Dataset", "287")],
+            "tags": ["XGBoost", "CIN", "PDF"],
+            "nav": "GynoCare AI",
+        },
+        {
+            "icon": "🚨", "name": "SepsisPredict AI", "version": "v1.0",
+            "color": "#E67E22",
+            "desc": "Sepsis précoce — XGBoost + LightGBM PhysioNet",
+            "metrics": [("AUC-ROC", "0.941"), ("Accuracy", "94.3%"), ("Dataset", "100k")],
+            "tags": ["XGBoost", "LightGBM", "PhysioNet"],
+            "nav": "SepsisPredict AI",
         },
     ]
 
-    ac1, ac2, ac3, ac4 = st.columns(4, gap="medium")
-    for col_a, mod in zip([ac1, ac2, ac3, ac4], _ACTIVE):
-        c  = mod["color"]
+    def _render_active_card(mod: dict) -> str:
+        c = mod["color"]
         tags_html = "".join(
             f'<span style="background:{c}18;color:{c};border:1px solid {c}44;'
-            f'border-radius:999px;padding:.18rem .55rem;font-size:.68rem;font-weight:700;'
-            f'margin:.15rem .1rem;display:inline-block;">{t}</span>'
+            f'border-radius:999px;padding:.15rem .5rem;font-size:.65rem;font-weight:700;'
+            f'margin:.12rem .08rem;display:inline-block;">{t}</span>'
             for t in mod["tags"]
         )
         metrics_html = "".join(
-            f'<div style="display:flex;justify-content:space-between;padding:.25rem 0;'
+            f'<div style="display:flex;justify-content:space-between;padding:.2rem 0;'
             f'border-bottom:1px solid #EEF2F6;">'
-            f'<span style="font-size:.76rem;color:#8AABB8;">{k}</span>'
-            f'<span style="font-size:.76rem;font-weight:700;color:#1A2B3C;">{v}</span></div>'
+            f'<span style="font-size:.72rem;color:#8AABB8;">{k}</span>'
+            f'<span style="font-size:.72rem;font-weight:700;color:#1A2B3C;">{v}</span></div>'
             for k, v in mod["metrics"]
         )
-        with col_a:
-            st.markdown(
-                f"""<div style="background:#FFF;border-radius:18px;padding:1.2rem;
-                border:1px solid #DDE8EE;box-shadow:0 4px 18px rgba(0,0,0,0.06);
-                border-top:4px solid {c};height:100%;">
-                <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;">
-                  <span style="font-size:1.6rem;">{mod['icon']}</span>
-                  <div>
-                    <div style="font-size:.92rem;font-weight:800;color:#1A2B3C;">{mod['name']}</div>
-                    <div style="font-size:.68rem;font-weight:700;color:{c};background:{c}15;
-                    border-radius:4px;padding:1px 6px;display:inline-block;">{mod['version']}</div>
-                  </div>
-                </div>
-                <p style="font-size:.78rem;color:#5E7A8A;line-height:1.55;margin:.4rem 0 .7rem;">{mod['desc']}</p>
-                <div style="margin-bottom:.7rem;">{metrics_html}</div>
-                <div style="line-height:2;">{tags_html}</div>
-                </div>""",
-                unsafe_allow_html=True,
-            )
+        return (
+            f'<div style="background:#FFF;border-radius:16px;padding:1rem;'
+            f'border:1px solid #DDE8EE;box-shadow:0 4px 14px rgba(0,0,0,0.06);'
+            f'border-top:4px solid {c};height:100%;margin-bottom:.6rem;">'
+            f'<div style="display:flex;align-items:center;gap:.45rem;margin-bottom:.4rem;">'
+            f'<span style="font-size:1.4rem;">{mod["icon"]}</span>'
+            f'<div>'
+            f'<div style="font-size:.86rem;font-weight:800;color:#1A2B3C;">{mod["name"]}</div>'
+            f'<div style="font-size:.63rem;font-weight:700;color:{c};background:{c}15;'
+            f'border-radius:4px;padding:1px 5px;display:inline-block;">{mod["version"]}</div>'
+            f'</div></div>'
+            f'<p style="font-size:.74rem;color:#5E7A8A;line-height:1.5;margin:.3rem 0 .6rem;">{mod["desc"]}</p>'
+            f'<div style="margin-bottom:.5rem;">{metrics_html}</div>'
+            f'<div style="line-height:1.9;">{tags_html}</div>'
+            f'</div>'
+        )
+
+    # Rangée 1 : 5 modules
+    _row1_cols = st.columns(5, gap="small")
+    for col, mod in zip(_row1_cols, _ACTIVE[:5]):
+        with col:
+            st.markdown(_render_active_card(mod), unsafe_allow_html=True)
+
+    # Rangée 2 : 4 modules
+    _row2_cols = st.columns(4, gap="medium")
+    for col, mod in zip(_row2_cols, _ACTIVE[5:]):
+        with col:
+            st.markdown(_render_active_card(mod), unsafe_allow_html=True)
 
     st.markdown("<div style='height:1.8rem'></div>", unsafe_allow_html=True)
 
-    # ── Modules scaffold (13) ────────────────────────────────────────────────
+    # ── Modules en développement (8 restants) ───────────────────────────────
+    st.markdown("<div style='height:1.8rem'></div>", unsafe_allow_html=True)
     st.markdown(
         "<h2 style='font-size:1.2rem;font-weight:800;color:#1A2B3C;margin:0 0 .8rem;'>"
-        "⚙️ Modules en développement <span style='font-size:.78rem;font-weight:500;"
-        "color:#8AABB8;'>(13 modules — modèles en cours d'entraînement)</span></h2>",
+        "⚙️ Modules en développement "
+        "<span style='font-size:.78rem;font-weight:500;color:#8AABB8;'>"
+        "(8 modules — données téléchargées, entraînement en cours)</span></h2>",
         unsafe_allow_html=True,
     )
 
     _SCAFFOLD_ORDER = [
-        ("pulmoscan", "🫁"), ("derm", "🩺"), ("retina", "👁️"), ("cardio", "❤️"),
-        ("neuro", "🧠"), ("gastro", "🔬"), ("histopath", "🧫"), ("osteo", "🦴"),
-        ("sepsis", "🚨"), ("hepato", "🫀"), ("nephro", "💧"), ("hemato", "🩸"),
-        ("gyno", "🎗️"),
+        ("pulmoscan", "🫁"), ("derm", "🩺"), ("retina", "👁️"), ("neuro", "🧠"),
+        ("gastro", "🔬"), ("histopath", "🧫"), ("osteo", "🦴"), ("hepato", "🫀"),
     ]
 
     _sc_cols = st.columns(4, gap="small")
@@ -1332,8 +1382,8 @@ def page_accueil() -> None:
          "Interface clinique multi-modules · Thème KANEA · Graphiques Plotly interactifs"),
         ("⚡", "API REST", "FastAPI · 20+ routes", "#2E86DE",
          "Endpoints /predict/* · Upload images · Génération rapports · OpenAPI docs"),
-        ("🤖", "Inference", "ONNX Runtime · CPU", "#E67E22",
-         "Malaria 85 MB + Cancer sein 16 MB · Sans GPU · Latence < 500 ms"),
+        ("🤖", "Inference", "ONNX + XGBoost · CPU", "#E67E22",
+         "9 modules actifs · Malaria 85 MB · Cancer 16 MB · XGBoost tabulaire · Sans GPU"),
         ("📄", "Rapports", "ReportLab · PDF A4", "#8E44AD",
          "QR code UUID unique · CAM · Tableaux cliniques · Impression directe"),
         ("🔬", "Explainability", "CAM + SHAP", "#27AE60",
@@ -1716,16 +1766,20 @@ def page_dashboard(health_df: pd.DataFrame, climate_df: pd.DataFrame) -> None:
     with col_radar:
         st.markdown(
             "<p style='font-weight:700;font-size:1rem;color:#1A2B3C;margin:0 0 .5rem;'>"
-            "🎯 Performances des 5 modules actifs</p>",
+            "🎯 Performances des 9 modules actifs</p>",
             unsafe_allow_html=True,
         )
         _categories = ["Accuracy", "AUC-ROC", "F1-score", "Sensitivity", "Dataset size"]
         _perf_data = [
-            {"name": "MalariaScan",      "color": "#C0392B", "values": [92.5, 96.9, 95.8, 91.4, 90]},
-            {"name": "NutriTrack",       "color": "#E67E22", "values": [91.3, 88.0, 90.5, 89.7, 70]},
-            {"name": "BioID AI",         "color": "#8E44AD", "values": [95.0, 92.0, 94.0, 93.5, 65]},
-            {"name": "BreastCancer",     "color": "#D91E7A", "values": [94.0, 99.6, 93.0, 92.8, 75]},
-            {"name": "HematoVision",     "color": "#C0392B", "values": [93.0, 94.5, 92.5, 95.0, 80]},
+            {"name": "MalariaScan",   "color": "#C0392B", "values": [92.5, 96.9, 95.8, 91.4, 90]},
+            {"name": "NutriTrack",    "color": "#E67E22", "values": [91.3, 88.0, 90.5, 89.7, 70]},
+            {"name": "BioID AI",      "color": "#8E44AD", "values": [95.0, 92.0, 94.0, 93.5, 65]},
+            {"name": "BreastCancer",  "color": "#D91E7A", "values": [94.0, 99.6, 93.0, 92.8, 75]},
+            {"name": "HematoVision",  "color": "#8B0000", "values": [93.0, 94.5, 92.5, 95.0, 80]},
+            {"name": "CardioSense",   "color": "#E74C3C", "values": [98.1, 99.4, 98.1, 97.5, 88]},
+            {"name": "NephroAI",      "color": "#2E86DE", "values": [75.2, 82.9, 75.1, 80.0, 70]},
+            {"name": "GynoCare",      "color": "#9B59B6", "values": [96.6, 99.2, 96.6, 93.0, 65]},
+            {"name": "SepsisPredict", "color": "#E67E22", "values": [94.3, 94.1, 35.5, 71.0, 85]},
         ]
         def _hex_rgba(hex_c: str, alpha: float = 0.18) -> str:
             h = hex_c.lstrip("#")
