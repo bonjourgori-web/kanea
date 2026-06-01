@@ -1279,49 +1279,62 @@ def page_accueil() -> None:
         },
     ]
 
-    def _render_active_card(mod: dict) -> str:
-        c = mod["color"]
-        tags_html = "".join(
-            f'<span style="background:{c}18;color:{c};border:1px solid {c}44;'
-            f'border-radius:999px;padding:.15rem .5rem;font-size:.65rem;font-weight:700;'
-            f'margin:.12rem .08rem;display:inline-block;">{t}</span>'
-            for t in mod["tags"]
-        )
-        metrics_html = "".join(
-            f'<div style="display:flex;justify-content:space-between;padding:.2rem 0;'
-            f'border-bottom:1px solid #EEF2F6;">'
-            f'<span style="font-size:.72rem;color:#8AABB8;">{k}</span>'
-            f'<span style="font-size:.72rem;font-weight:700;color:#1A2B3C;">{v}</span></div>'
-            for k, v in mod["metrics"]
-        )
+    def _active_card(icon, name, version, color, desc, metrics, tags):
+        tags_html = ""
+        for t in tags:
+            tags_html += (
+                '<span style="background:' + color + '22;color:' + color + ';'
+                'border:1px solid ' + color + '55;border-radius:999px;'
+                'padding:.15rem .5rem;font-size:.64rem;font-weight:700;'
+                'margin:.1rem .08rem;display:inline-block;">' + t + '</span>'
+            )
+        metrics_html = ""
+        for k, v in metrics:
+            metrics_html += (
+                '<div style="display:flex;justify-content:space-between;'
+                'padding:.2rem 0;border-bottom:1px solid #EEF2F6;">'
+                '<span style="font-size:.72rem;color:#8AABB8;">' + k + '</span>'
+                '<span style="font-size:.72rem;font-weight:700;color:#1A2B3C;">' + v + '</span>'
+                '</div>'
+            )
         return (
-            f'<div style="background:#FFF;border-radius:16px;padding:1rem;'
-            f'border:1px solid #DDE8EE;box-shadow:0 4px 14px rgba(0,0,0,0.06);'
-            f'border-top:4px solid {c};height:100%;margin-bottom:.6rem;">'
-            f'<div style="display:flex;align-items:center;gap:.45rem;margin-bottom:.4rem;">'
-            f'<span style="font-size:1.4rem;">{mod["icon"]}</span>'
-            f'<div>'
-            f'<div style="font-size:.86rem;font-weight:800;color:#1A2B3C;">{mod["name"]}</div>'
-            f'<div style="font-size:.63rem;font-weight:700;color:{c};background:{c}15;'
-            f'border-radius:4px;padding:1px 5px;display:inline-block;">{mod["version"]}</div>'
-            f'</div></div>'
-            f'<p style="font-size:.74rem;color:#5E7A8A;line-height:1.5;margin:.3rem 0 .6rem;">{mod["desc"]}</p>'
-            f'<div style="margin-bottom:.5rem;">{metrics_html}</div>'
-            f'<div style="line-height:1.9;">{tags_html}</div>'
-            f'</div>'
+            '<div style="background:#FFFFFF;border-radius:16px;padding:1rem;'
+            'border:1px solid #DDE8EE;box-shadow:0 4px 14px rgba(0,0,0,0.07);'
+            'border-top:4px solid ' + color + ';margin-bottom:.5rem;">'
+            '<div style="display:flex;align-items:center;gap:.45rem;margin-bottom:.45rem;">'
+            '<span style="font-size:1.4rem;">' + icon + '</span>'
+            '<div>'
+            '<div style="font-size:.88rem;font-weight:800;color:#1A2B3C;">' + name + '</div>'
+            '<div style="font-size:.63rem;font-weight:700;color:' + color + ';'
+            'background:' + color + '22;border-radius:4px;padding:1px 5px;'
+            'display:inline-block;">' + version + '</div>'
+            '</div></div>'
+            '<p style="font-size:.75rem;color:#5E7A8A;line-height:1.5;margin:.3rem 0 .6rem;">'
+            + desc + '</p>'
+            '<div style="margin-bottom:.5rem;">' + metrics_html + '</div>'
+            '<div style="line-height:1.9;">' + tags_html + '</div>'
+            '</div>'
         )
 
     # Rangée 1 : 5 modules
     _row1_cols = st.columns(5, gap="small")
     for col, mod in zip(_row1_cols, _ACTIVE[:5]):
         with col:
-            st.markdown(_render_active_card(mod), unsafe_allow_html=True)
+            st.markdown(
+                _active_card(mod["icon"], mod["name"], mod["version"],
+                             mod["color"], mod["desc"], mod["metrics"], mod["tags"]),
+                unsafe_allow_html=True,
+            )
 
     # Rangée 2 : 4 modules
     _row2_cols = st.columns(4, gap="medium")
     for col, mod in zip(_row2_cols, _ACTIVE[5:]):
         with col:
-            st.markdown(_render_active_card(mod), unsafe_allow_html=True)
+            st.markdown(
+                _active_card(mod["icon"], mod["name"], mod["version"],
+                             mod["color"], mod["desc"], mod["metrics"], mod["tags"]),
+                unsafe_allow_html=True,
+            )
 
     st.markdown("<div style='height:1.8rem'></div>", unsafe_allow_html=True)
 
