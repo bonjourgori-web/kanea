@@ -1,0 +1,126 @@
+{
+  "model_name": "efficientnet_b0",
+  "num_classes": 25,
+  "classes": [
+    "avc_ischemique",
+    "avc_hemorragique",
+    "hemorragie_intracerebrales",
+    "hemorragie_sous_arachnoide",
+    "hematome_epidural",
+    "hematome_sous_dural",
+    "glioblastome_grade4",
+    "astrocytome_grade2_3",
+    "meningiome",
+    "metastases_cerebrales",
+    "lymphome_cerebral",
+    "alzheimer",
+    "parkinson",
+    "demence_corps_lewy",
+    "sla",
+    "sclerose_en_plaques",
+    "encephalite_auto_immune",
+    "nmosd",
+    "traumatisme_cranien_severe",
+    "contusions_cerebrales",
+    "hydrocephalie",
+    "epilepsie_lesion_focale",
+    "anevrisme_cerebral",
+    "atrophie_cerebrale_diffuse",
+    "cerveau_normal"
+  ],
+  "class_to_idx": {
+    "brain_tumor_dataset": 0,
+    "no": 1,
+    "yes": 2
+  },
+  "img_size": 380,
+  "best_val_acc": 0.8649,
+  "epochs": 15,
+  "history": [
+    {
+      "epoch": 1,
+      "train_acc": 0.1343,
+      "val_acc": 0.2432
+    },
+    {
+      "epoch": 2,
+      "train_acc": 0.5417,
+      "val_acc": 0.7838
+    },
+    {
+      "epoch": 3,
+      "train_acc": 0.7454,
+      "val_acc": 0.8649
+    },
+    {
+      "epoch": 4,
+      "train_acc": 0.7593,
+      "val_acc": 0.8649
+    },
+    {
+      "epoch": 5,
+      "train_acc": 0.8241,
+      "val_acc": 0.8649
+    },
+    {
+      "epoch": 6,
+      "train_acc": 0.6343,
+      "val_acc": 0.8108
+    },
+    {
+      "epoch": 7,
+      "train_acc": 0.6759,
+      "val_acc": 0.8378
+    },
+    {
+      "epoch": 8,
+      "train_acc": 0.7176,
+      "val_acc": 0.8378
+    },
+    {
+      "epoch": 9,
+      "train_acc": 0.7269,
+      "val_acc": 0.8108
+    },
+    {
+      "epoch": 10,
+      "train_acc": 0.7315,
+      "val_acc": 0.8378
+    },
+    {
+      "epoch": 11,
+      "train_acc": 0.7037,
+      "val_acc": 0.8649
+    },
+    {
+      "epoch": 12,
+      "train_acc": 0.7407,
+      "val_acc": 0.8649
+    },
+    {
+      "epoch": 13,
+      "train_acc": 0.7639,
+      "val_acc": 0.8649
+    },
+    {
+      "epoch": 14,
+      "train_acc": 0.75,
+      "val_acc": 0.8378
+    },
+    {
+      "epoch": 15,
+      "train_acc": 0.7454,
+      "val_acc": 0.8649
+    }
+  ],
+  "datasets": [
+    "BraTS",
+    "ISLES",
+    "ADNI",
+    "RSNA-ICH",
+    "MSSEG",
+    "CQ500",
+    "OASIS-3"
+  ],
+  "onnx_path": "C:\\Users\\HP\\gori\\KANEA\\models\\deep_learning\\neuro_model.onnx"
+}

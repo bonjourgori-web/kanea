@@ -1,0 +1,14 @@
+{
+  "accuracy": 0.8095,
+  "f1_weighted": 0.7859,
+  "auc_roc": 0.7704,
+  "classes": [
+    "C",
+    "CL",
+    "D"
+  ],
+  "architecture": "XGBoost",
+  "dataset": "Cirrhosis Prediction Dataset",
+  "samples_train": 334,
+  "training_time_s": 82.5
+}

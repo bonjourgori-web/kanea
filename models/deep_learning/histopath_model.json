@@ -1,0 +1,13 @@
+{
+  "accuracy": 1.0,
+  "f1_weighted": 1.0,
+  "auc_roc": NaN,
+  "classes": [
+    "Normal / Tissu sain",
+    "Adénome bénin"
+  ],
+  "architecture": "ResNet18",
+  "dataset": "GlaS + PathMNIST",
+  "samples_train": 264,
+  "training_time_s": 164.5
+}
