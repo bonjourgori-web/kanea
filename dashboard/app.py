@@ -1031,7 +1031,7 @@ def render_sidebar() -> tuple[str, str]:
 
         page = st.radio(
             label="nav",
-            options=["🏠 Accueil", "📊 Dashboard", "🦠 Maladies", "🗺️ Carte", "⚙️ Paramètres"],
+            options=["🏠 Accueil", "📊 Dashboard", "🦠 Maladies", "👤 Analyse Patient", "🗺️ Carte", "⚙️ Paramètres"],
             label_visibility="collapsed",
             key="main_nav",
         )
@@ -6169,6 +6169,13 @@ def main() -> None:
 
     elif page == "🦠 Maladies":
         page_maladies(sous_page)
+
+    elif page == "👤 Analyse Patient":
+        try:
+            from dashboard.patient_analysis import render_patient_analysis
+            render_patient_analysis()
+        except Exception as _e:
+            st.error(f"Erreur module Analyse Patient : {_e}")
 
     elif page == "🗺️ Carte":
         page_carte(health_df)
