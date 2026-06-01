@@ -1071,10 +1071,11 @@ def render_sidebar() -> tuple[str, str]:
         )
 
         modules = [
-            ("🔬", "MalariaScan", "ResNet34"),
-            ("📊", "Biometry",    "RF + XGBoost"),
-            ("🦴", "BioID",       "PCA + Régressions"),
-            ("🩺", "BreastCancer","EfficientNet-B0"),
+            ("🔬", "MalariaScan",     "ResNet34"),
+            ("📊", "Biometry",        "RF + XGBoost"),
+            ("🦴", "BioID",           "PCA + Régressions"),
+            ("🩺", "BreastCancer",    "EfficientNet-B0"),
+            ("🩸", "HematoVision",    "NFS · WHO 2022 · ELN"),
         ]
         for icon, name, tech in modules:
             st.markdown(
@@ -1152,7 +1153,7 @@ def page_accueil() -> None:
               <div style="display:flex;gap:.6rem;flex-wrap:wrap;">
                 <span style="background:rgba(39,174,96,0.15);border:1px solid rgba(39,174,96,0.35);
                      border-radius:999px;padding:.2rem .7rem;font-size:.72rem;font-weight:700;color:#6EE49E;">
-                     ✅ 4 Modules actifs</span>
+                     ✅ 5 Modules actifs</span>
                 <span style="background:rgba(46,134,222,0.15);border:1px solid rgba(46,134,222,0.35);
                      border-radius:999px;padding:.2rem .7rem;font-size:.72rem;font-weight:700;color:#7EC8F8;">
                      🔬 ONNX · CPU uniquement</span>
@@ -1170,7 +1171,7 @@ def page_accueil() -> None:
     # ── Compteurs statistiques ───────────────────────────────────────────────
     stats = [
         ("🧬", "17", "Modules IA", "#20B2AA"),
-        ("✅", "4",  "Modules actifs", "#27AE60"),
+        ("✅", "5",  "Modules actifs", "#27AE60"),
         ("🖼️", "27 560", "Images NIH", "#2E86DE"),
         ("🎯", "92.5%", "Accuracy malaria", "#E74C3C"),
         ("📄", "A4 PDF", "Rapports cliniques", "#8E44AD"),
@@ -1715,15 +1716,16 @@ def page_dashboard(health_df: pd.DataFrame, climate_df: pd.DataFrame) -> None:
     with col_radar:
         st.markdown(
             "<p style='font-weight:700;font-size:1rem;color:#1A2B3C;margin:0 0 .5rem;'>"
-            "🎯 Performances des 4 modules actifs</p>",
+            "🎯 Performances des 5 modules actifs</p>",
             unsafe_allow_html=True,
         )
         _categories = ["Accuracy", "AUC-ROC", "F1-score", "Sensitivity", "Dataset size"]
         _perf_data = [
-            {"name": "MalariaScan",   "color": "#C0392B", "values": [92.5, 96.9, 95.8, 91.4, 90]},
-            {"name": "NutriTrack",    "color": "#E67E22", "values": [91.3, 88.0, 90.5, 89.7, 70]},
-            {"name": "BioID AI",      "color": "#8E44AD", "values": [95.0, 92.0, 94.0, 93.5, 65]},
-            {"name": "BreastCancer",  "color": "#D91E7A", "values": [94.0, 99.6, 93.0, 92.8, 75]},
+            {"name": "MalariaScan",      "color": "#C0392B", "values": [92.5, 96.9, 95.8, 91.4, 90]},
+            {"name": "NutriTrack",       "color": "#E67E22", "values": [91.3, 88.0, 90.5, 89.7, 70]},
+            {"name": "BioID AI",         "color": "#8E44AD", "values": [95.0, 92.0, 94.0, 93.5, 65]},
+            {"name": "BreastCancer",     "color": "#D91E7A", "values": [94.0, 99.6, 93.0, 92.8, 75]},
+            {"name": "HematoVision",     "color": "#C0392B", "values": [93.0, 94.5, 92.5, 95.0, 80]},
         ]
         def _hex_rgba(hex_c: str, alpha: float = 0.18) -> str:
             h = hex_c.lstrip("#")

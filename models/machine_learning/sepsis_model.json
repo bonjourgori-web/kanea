@@ -1,0 +1,16 @@
+{
+  "accuracy": 0.9425,
+  "f1_binary": 0.3554,
+  "auc_roc": 0.9411,
+  "architecture": "XGBoost + LightGBM Ensemble",
+  "dataset": "PhysioNet Sepsis Challenge 2019",
+  "classes": [
+    "Pas de sepsis",
+    "SIRS",
+    "Sepsis",
+    "Sepsis severe",
+    "Choc septique"
+  ],
+  "note": "Classe tres desequilibree (2.2% sepsis) - AUC metrique principale",
+  "samples_train": 80000
+}

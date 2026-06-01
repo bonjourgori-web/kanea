@@ -1,21 +1,14 @@
 $ErrorActionPreference = "Stop"
+$PYTHON = "C:\Python314\python.exe"
 
-Write-Host "== KANEA setup ==" -ForegroundColor Cyan
+Write-Host "== KANEA setup (Python systeme) ==" -ForegroundColor Cyan
+Write-Host "Python : $((& $PYTHON --version 2>&1))" -ForegroundColor Green
 
-if (-not (Test-Path ".\\venv")) {
-    Write-Host "Creation de l'environnement virtuel..." -ForegroundColor Yellow
-    python -m venv venv
-}
+Write-Host "`nVerification des packages requis..." -ForegroundColor Yellow
+& $PYTHON -m pip install --upgrade --quiet streamlit streamlit-folium pandas numpy scipy plotly folium scikit-learn xgboost joblib lightgbm shap reportlab qrcode pillow requests tqdm onnxruntime torch torchvision 2>&1
 
-Write-Host "Activation de l'environnement virtuel..." -ForegroundColor Yellow
-. .\venv\Scripts\Activate.ps1
-
-Write-Host "Mise a jour de pip..." -ForegroundColor Yellow
-python -m pip install --upgrade pip
-
-Write-Host "Installation des dependances..." -ForegroundColor Yellow
-python -m pip install -r requirements.txt
-
-Write-Host "Setup termine." -ForegroundColor Green
-Write-Host "Dashboard : python scripts/run_dashboard.py" -ForegroundColor Green
-Write-Host "API       : python scripts/run_api.py" -ForegroundColor Green
+Write-Host "`nSetup termine." -ForegroundColor Green
+Write-Host "Dashboard  : scripts\run_dashboard.bat" -ForegroundColor Green
+Write-Host "API        : scripts\run_api.bat" -ForegroundColor Green
+Write-Host "Entrainement malaria :" -ForegroundColor Green
+Write-Host "  $PYTHON main.py --module malaria --skip-download --epochs 20" -ForegroundColor Cyan

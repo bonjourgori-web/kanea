@@ -1,3 +1,3 @@
 @echo off
-call venv\Scripts\activate
-python scripts\run_api.py
+cd /d "%~dp0.."
+C:\Python314\python.exe scripts\run_api.py

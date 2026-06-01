@@ -1,0 +1,14 @@
+{
+  "accuracy": 0.9815,
+  "f1_weighted": 0.9806,
+  "auc_roc": 0.9937,
+  "classes": [
+    "Normal",
+    "Supraventriculaire",
+    "Ventriculaire",
+    "Fusion",
+    "Inconnu"
+  ],
+  "dataset": "MIT-BIH Arrhythmia",
+  "architecture": "XGBoost"
+}

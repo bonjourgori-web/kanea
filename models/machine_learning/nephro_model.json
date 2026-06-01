@@ -1,0 +1,12 @@
+{
+  "accuracy": 0.7518,
+  "f1_weighted": 0.7513,
+  "auc_roc": 0.8294,
+  "classes": [
+    "Pas de risque",
+    "Pré-diabète",
+    "Diabète/risque élevé"
+  ],
+  "dataset": "BRFSS2015 Diabetes Health Indicators",
+  "architecture": "XGBoost"
+}
