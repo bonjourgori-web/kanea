@@ -1,0 +1,12 @@
+{
+  "accuracy": 0.97,
+  "f1_weighted": 0.9698,
+  "classes": [
+    "NORMAL",
+    "PNEUMONIA"
+  ],
+  "architecture": "MobileNetV2",
+  "dataset": "pulmoscan",
+  "samples_train": 800,
+  "training_time_s": 947.5
+}
